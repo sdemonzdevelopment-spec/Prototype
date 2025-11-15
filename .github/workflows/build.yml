@@ -1,4 +1,4 @@
-name: Build Ren'Py Android (final)
+name: Build Ren'Py Android (fixed)
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  RENPY_VERSION: "8.2.1"
+  RENPY_VERSION: "8.2.1"         # change if you want a different Ren'Py SDK version
   ANDROID_API: "34"
   BUILD_TOOLS: "34.0.0"
   NDK_VERSION: "25.2.9519653"
@@ -17,7 +17,7 @@ env:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
 
     steps:
       - name: Checkout repository
@@ -35,19 +35,22 @@ jobs:
       - name: Verify Java
         run: |
           java -version
+        shell: bash
 
       - name: Install system packages
         run: |
           sudo apt-get update
           sudo apt-get install -y python3 python3-pip python3-dev build-essential unzip wget curl
+        shell: bash
 
-      - name: Setup Python
+      - name: Setup Python (no cache)
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Ensure pip packaging tools
         run: python3 -m pip install --upgrade pip setuptools wheel
+        shell: bash
 
       - name: Download & extract Ren'Py SDK
         id: renpy
@@ -68,14 +71,41 @@ jobs:
           mv "$RENPY_DIR" renpy-sdk
           echo "RENPY_ROOT=$(pwd)/renpy-sdk" >> $GITHUB_ENV
           ls -la renpy-sdk
+        shell: bash
+
+      - name: Download & extract RAPT (Ren'Py Android tools)
+        id: rapt
+        run: |
+          set -e
+          RENPY_VER="${{ env.RENPY_VERSION }}"
+          RAPT_URL="https://www.renpy.org/dl/${RENPY_VER}/rapt-${RENPY_VER}.zip"
+          echo "Attempting to download RAPT from: $RAPT_URL"
+          # try download; if 404, we will fail gracefully and show contents for debugging
+          wget -q -O rapt.zip "$RAPT_URL" || (echo "Failed to wget RAPT; listing renpy-sdk for troubleshooting" && ls -la renpy-sdk && exit 0)
+          unzip -qq rapt.zip -d rapt-temp
+          # find extracted folder
+          RAPT_DIR=$(find rapt-temp -maxdepth 1 -type d -name "rapt*" -print -quit)
+          if [ -z "$RAPT_DIR" ]; then
+            # if the zip contains files directly, copy them into renpy-sdk/rapt
+            mkdir -p renpy-sdk/rapt
+            cp -r rapt-temp/* renpy-sdk/rapt/ || true
+            echo "RAPT files copied into renpy-sdk/rapt"
+          else
+            mv "$RAPT_DIR" renpy-sdk/rapt
+            echo "Moved $RAPT_DIR to renpy-sdk/rapt"
+          fi
+          ls -la renpy-sdk/rapt || true
+        shell: bash
 
       - name: Debug repo layout
         run: |
           echo "Repository root listing:"
           ls -la
+          echo "RENPY_ROOT = $RENPY_ROOT"
+          echo "Contents of renpy-sdk:"
+          ls -la renpy-sdk || true
           echo "game/ exists?:"
           if [ -d "game" ]; then echo "game folder present"; ls -la game || true; else echo "game NOT present"; fi
-          echo "RENPY_ROOT = $RENPY_ROOT"
         shell: bash
 
       - name: Install Android cmdline-tools & SDK packages
@@ -101,6 +131,7 @@ jobs:
           rm -f tools.zip || true
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "Installing Android SDK components (may prompt license acceptance)..."
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
             "platform-tools" \
             "platforms;android-${{ env.ANDROID_API }}" \
@@ -126,6 +157,7 @@ jobs:
           fi
           cd "$RAPT_DIR"
           python3 configure.py --android-sdk "$ANDROID_SDK_ROOT" --android-api ${{ env.ANDROID_API }} --android-ndk "$ANDROID_NDK_HOME"
+          echo "RAPT configured."
         shell: bash
 
       - name: Copy game files into Ren'Py SDK
