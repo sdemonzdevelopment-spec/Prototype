@@ -20,14 +20,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 17 (required for latest sdkmanager)
+      - name: Set up Java 17 (required for sdkmanager)
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Verify Java is 17
-        run: java -version
+      - name: Debug workspace (before SDK install)
+        run: |
+          echo "Repo root contents:"
+          ls -la
+          echo "Exists game/ ?"
+          [ -d "game" ] && echo "game folder present" || echo "game folder NOT present"
+        shell: bash
 
       - name: Install Android SDK + NDK (2024-safe)
         run: |
@@ -37,10 +42,8 @@ jobs:
           cd "$ANDROID_SDK_ROOT/cmdline-tools"
           echo "Downloading latest cmdline-tools..."
           curl -o tools.zip -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip tools.zip -d ./tmp
+          unzip -qq tools.zip -d ./tmp
           mv ./tmp/cmdline-tools ./latest
-          echo "Installed cmdline-tools structure:"
-          ls -R .
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
             "platform-tools" \
@@ -48,27 +51,46 @@ jobs:
             "build-tools;${BUILD_TOOLS}" \
             "ndk;${NDK_VERSION}"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+        shell: bash
 
-      - name: Setup RenPy
+      - name: Add Android SDK tools to PATH
+        run: |
+          echo "$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/build-tools/${BUILD_TOOLS}" >> $GITHUB_PATH
+        shell: bash
+
+      - name: Setup RenPy CLI
         uses: remarkablegames/setup-renpy@v1
         with:
           renpy-version: ${{ env.RENPY_VERSION }}
 
-      - name: Verify tools
+      - name: Debug tools & workspace (before packaging)
         run: |
           java -version
           renpy-cli --version || true
-          adb --version || true
+          echo "Workspace top-level:"
           ls -la
+          echo "game/ folder listing:"
+          ls -la game || true
+        shell: bash
 
-      - name: Build APK
+      - name: Run Ren'Py Android packaging (produce APK/AAB)
         run: |
           set -e
-          echo "Building Android package..."
-          renpy-cli ./renpy --package android ./game
+          echo "Packaging game located at ./game ..."
+          # NOTE: remove any ./renpy path argument; renpy-cli is installed by setup-renpy action
+          renpy-cli --package android ./game || (echo "renpy-cli failed" && exit 1)
+        shell: bash
 
-      - name: Find and upload APK
+      - name: Find APK/AAB outputs
+        run: |
+          echo "Search for build outputs:"
+          find . -type f \( -iname "*.apk" -o -iname "*.aab" \) -maxdepth 8 -print || true
+        shell: bash
+
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: renpy-apk
-          path: "**/*.apk"
+          name: renpy-android-build
+          path: |
+            **/*.apk
+            **/*.aab
