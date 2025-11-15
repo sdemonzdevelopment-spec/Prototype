@@ -1,0 +1,238 @@
+name: Build Ren'Py Android (RenPy 8.1.3)
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+env:
+  RENPY_VERSION: "8.1.3"
+  ANDROID_API: "30"
+  BUILD_TOOLS: "30.0.3"
+  NDK_VERSION: "21.3.6528147"
+  # Java 21 is recommended for Ren'Py 8.2+ (and 8.1)
+  JAVA_VERSION: "21"
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Setup Java (21)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Force-clean old SDK cache
+        run: |
+          rm -rf renpy-sdk.tar.bz2 renpy-sdk-extract renpy-sdk rapt-download.zip rapt rapt-extract
+          echo "Cleanup complete."
+
+      - name: Download & extract Ren'Py 8 SDK
+        id: renpy
+        run: |
+          set -euo pipefail
+          RENPY_VER="${{ env.RENPY_VERSION }}"
+          RENPY_URL="https://www.renpy.org/dl/${RENPY_VER}/renpy-${RENPY_VER}-sdk.tar.bz2"
+          
+          echo "Downloading Ren'Py SDK (Version: $RENPY_VER)..."
+          wget -q -O renpy-sdk.tar.bz2 "$RENPY_URL"
+          
+          echo "Extracting SDK..."
+          mkdir -p renpy-sdk-extract
+          tar xf renpy-sdk.tar.bz2 -C renpy-sdk-extract
+          
+          RENPY_DIR=$(find renpy-sdk-extract -maxdepth 1 -type d -name "renpy-*-sdk" -print -quit)
+          if [ -z "$RENPY_DIR" ]; then
+            echo "::error::Could not find extracted Ren'Py SDK directory in renpy-sdk-extract"
+            ls -la renpy-sdk-extract || true
+            exit 1
+          fi
+          echo "Ren'Py SDK detected at: $RENPY_DIR"
+          mv "$RENPY_DIR" renpy-sdk
+          echo "RENPY_ROOT=$(pwd)/renpy-sdk" >> $GITHUB_ENV
+          
+          echo "Contents of renpy-sdk (before RAPT):"
+          ls -la renpy-sdk
+
+      # ===================================================================
+      # Robust RAPT download + install: extract to temp, locate rapt dir and move it into renpy-sdk/rapt
+      - name: Download & install RAPT (Android Tools)
+        id: rapt_install
+        run: |
+          set -euo pipefail
+          RENPY_VER="${{ env.RENPY_VERSION }}"
+          RAPT_URL="https://www.renpy.org/dl/${RENPY_VER}/renpy-${RENPY_VER}-rapt.zip"
+          
+          echo "Downloading RAPT (Android Tools) from: $RAPT_URL"
+          wget -q -O rapt-download.zip "$RAPT_URL"
+          
+          echo "Extracting RAPT zip to temp folder..."
+          rm -rf rapt-extract
+          mkdir -p rapt-extract
+          unzip -q rapt-download.zip -d rapt-extract
+          
+          # Try to find a directory explicitly named 'rapt' first, then any folder containing 'rapt' in the name
+          RAPT_DIR=$(find rapt-extract -maxdepth 4 -type d -iname "rapt" -print -quit || true)
+          if [ -z "$RAPT_DIR" ]; then
+            RAPT_DIR=$(find rapt-extract -maxdepth 4 -type d -iname "*rapt*" -print -quit || true)
+          fi
+          
+          if [ -z "$RAPT_DIR" ]; then
+            echo "::error::Could not find RAPT folder inside the zip. Listing rapt-extract contents for debugging..."
+            find rapt-extract -maxdepth 4 -print
+            exit 1
+          fi
+          
+          echo "Found RAPT at: $RAPT_DIR"
+          # Ensure renpy-sdk exists
+          if [ ! -d renpy-sdk ]; then
+            echo "::error::renpy-sdk directory not found; expected it to be created by previous step."
+            ls -la || true
+            exit 1
+          fi
+          
+          # Move the located rapt folder into renpy-sdk/rapt (normalize name)
+          rm -rf renpy-sdk/rapt || true
+          mv "$RAPT_DIR" renpy-sdk/rapt
+          
+          # Make sure python scripts are executable
+          find renpy-sdk/rapt -type f -name "*.py" -exec chmod +x {} \; || true
+          
+          echo "Contents of renpy-sdk (after RAPT install):"
+          ls -la renpy-sdk || true
+          
+          if [ ! -d "renpy-sdk/rapt" ]; then
+            echo "::error::Failed to move RAPT folder correctly into renpy-sdk/rapt."
+            ls -la renpy-sdk || true
+            exit 1
+          else
+            echo "RAPT successfully installed into renpy-sdk/rapt"
+          fi
+          
+          # Export RAPT root so later steps can reference it directly if desired
+          echo "RAPT_ROOT=$(pwd)/renpy-sdk/rapt" >> $GITHUB_ENV
+        shell: bash
+      # ===================================================================
+
+      - name: Install Android cmdline-tools & SDK packages
+        run: |
+          set -euo pipefail
+          ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          cd "$ANDROID_SDK_ROOT/cmdline-tools"
+          echo "Downloading Android command line tools..."
+          wget -q -O tools.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          unzip -qq tools.zip -d ./tmp
+          if [ -d ./tmp/cmdline-tools ]; then
+            mv ./tmp/cmdline-tools ./latest
+          else
+            FOUND=$(find ./tmp -maxdepth 2 -type d -name "cmdline-tools" -print -quit || true)
+            if [ -n "$FOUND" ]; then
+              mv "$FOUND" ./latest
+            else
+              mkdir -p ./latest
+              mv ./tmp/* ./latest || true
+            fi
+          fi
+          rm -f tools.zip || true
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "Installing Android SDK components..."
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
+            "platform-tools" \
+            "platforms;android-${{ env.ANDROID_API }}" \
+            "build-tools;${{ env.BUILD_TOOLS }}" \
+            "ndk;${{ env.NDK_VERSION }}" || true
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${{ env.NDK_VERSION }}" >> $GITHUB_ENV
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
+        shell: bash
+
+      - name: Configure RAPT (Ren'Py Android Packaging Tool)
+        run: |
+          set -euo pipefail
+          # RENPY_ROOT is set in a previous step
+          if [ -z "${RENPY_ROOT:-}" ]; then
+            echo "::error::RENPY_ROOT not set in environment. Did Ren'Py extraction step succeed?"
+            env | sort
+            exit 1
+          fi
+
+          RAPT_DIR="$RENPY_ROOT/rapt"
+          if [ ! -d "$RAPT_DIR" ]; then
+            echo "::error::RAPT directory still not found at $RAPT_DIR"
+            ls -la "$RENPY_ROOT" || true
+            exit 1
+          fi
+          
+          # Ensure Android SDK/NDK env vars are present
+          if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
+            echo "::warning::ANDROID_SDK_ROOT not set; attempting to read from GITHUB_ENV fallback."
+          fi
+          if [ -z "${ANDROID_NDK_HOME:-}" ]; then
+            echo "::warning::ANDROID_NDK_HOME not set; ensure Android SDK installation step ran successfully."
+          fi
+
+          # Run configure.py from RAPT; pass explicit paths
+          cd "$RAPT_DIR"
+          echo "Running: python3 configure.py --android-sdk \"$ANDROID_SDK_ROOT\" --android-api ${{ env.ANDROID_API }} --android-ndk \"$ANDROID_NDK_HOME\""
+          python3 configure.py --android-sdk "$ANDROID_SDK_ROOT" --android-api ${{ env.ANDROID_API }} --android-ndk "$ANDROID_NDK_HOME"
+          echo "RAPT configured."
+        shell: bash
+
+      - name: Copy game files into Ren'Py SDK
+        run: |
+          set -euo pipefail
+          if [ -d "game" ]; then
+            rm -rf "$RENPY_ROOT/game" || true
+            cp -r game "$RENPY_ROOT/game"
+            echo "Copied game/ to $RENPY_ROOT/game"
+          else
+            echo "Error: 'game' directory not found in repository root"
+            exit 1
+          fi
+          if [ -f "options.rpy" ]; then
+            cp options.rpy "$RENPY_ROOT/game/" || true
+          fi
+        shell: bash
+
+      - name: Build Android APK (release)
+        run: |
+          set -euo pipefail
+          cd "$RENPY_ROOT/rapt"
+          echo "Starting RAPT android build..."
+          python3 android.py build "$RENPY_ROOT/game" --package com.demonz.development.demo --name "DemonZ Prototype" --version "1.0.0" --numeric-version 1 --orientation landscape release
+        shell: bash
+
+      - name: Find artifacts (debug)
+        run: |
+          echo "Listing renpy-rapt output folder:"
+          ls -la "$RENPY_ROOT/rapt/bin" || true
+          echo "Searching for APK/AAB files in workspace:"
+          find . -type f \( -iname "*.apk" -o -iname "*.aab" \) -print || true
+        shell: bash
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: renpy-android-build
+          path: |
+            $RENPY_ROOT/rapt/bin/*.apk
+            $RENPY_ROOT/rapt/bin/*.aab
+          if-no-files-found: warn
