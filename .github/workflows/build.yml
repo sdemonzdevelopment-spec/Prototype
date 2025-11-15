@@ -65,21 +65,21 @@ jobs:
           echo "Contents of renpy-sdk (before RAPT):"
           ls -la renpy-sdk
 
-      # ===================================================================
-      # THIS IS THE NEW, FIXED STEP
-      # It downloads RAPT (which is separate in Ren'Py 8) and puts it
-      # inside the renpy-sdk folder where the script expects it.
       - name: Download & install RAPT (Android Tools)
         run: |
           set -euo pipefail
           RENPY_VER="${{ env.RENPY_VERSION }}"
-          RAPT_URL="https://www.renpy.org/dl/${RENPY_VER}/rapt-${RENPY_VER}.zip"
+          
+          # ===================================================================
+          # THIS IS THE CORRECTED URL
+          RAPT_URL="https://www.renpy.org/dl/${RENPY_VER}/renpy-${RENPY_VER}-rapt.zip"
+          # ===================================================================
           
           echo "Downloading RAPT (Android Tools) from: $RAPT_URL"
+          # Added -q (quiet) back, but if it fails, the exit code will show
           wget -q -O rapt-download.zip "$RAPT_URL"
           
           echo "Unzipping RAPT into renpy-sdk folder..."
-          # Unzip the 'rapt' folder FROM the zip file INTO the 'renpy-sdk' directory
           unzip -q rapt-download.zip -d renpy-sdk
           
           echo "Contents of renpy-sdk (after RAPT install):"
@@ -92,7 +92,6 @@ jobs:
             echo "RAPT successfully installed into renpy-sdk/rapt"
           fi
         shell: bash
-      # ===================================================================
 
       - name: Install Android cmdline-tools & SDK packages
         run: |
@@ -131,7 +130,6 @@ jobs:
       - name: Configure RAPT (Ren'Py Android Packaging Tool)
         run: |
           set -euo pipefail
-          # This step will now succeed!
           RAPT_DIR="$RENPY_ROOT/rapt"
           if [ ! -d "$RAPT_DIR" ]; then
             echo "::error::RAPT directory still not found at $RAPT_DIR"
