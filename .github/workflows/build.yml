@@ -12,7 +12,6 @@ env:
   ANDROID_API: "30"
   BUILD_TOOLS: "30.0.3"
   NDK_VERSION: "21.3.6528147"
-  # Java 21 is recommended for Ren'Py 8.2+ (and 8.1)
   JAVA_VERSION: "21"
 
 jobs:
@@ -70,8 +69,6 @@ jobs:
           echo "Contents of renpy-sdk (before RAPT):"
           ls -la renpy-sdk
 
-      # ===================================================================
-      # Robust RAPT download + install: extract to temp, locate rapt dir and move it into renpy-sdk/rapt
       - name: Download & install RAPT (Android Tools)
         id: rapt_install
         run: |
@@ -87,48 +84,44 @@ jobs:
           mkdir -p rapt-extract
           unzip -q rapt-download.zip -d rapt-extract
           
-          # Try to find a directory explicitly named 'rapt' first, then any folder containing 'rapt' in the name
-          RAPT_DIR=$(find rapt-extract -maxdepth 4 -type d -iname "rapt" -print -quit || true)
-          if [ -z "$RAPT_DIR" ]; then
-            RAPT_DIR=$(find rapt-extract -maxdepth 4 -type d -iname "*rapt*" -print -quit || true)
-          fi
+          echo "Searching for configure.py to locate RAPT directory..."
+          CONFIGURE_PY=$(find rapt-extract -type f -name "configure.py" -print -quit || true)
           
-          if [ -z "$RAPT_DIR" ]; then
-            echo "::error::Could not find RAPT folder inside the zip. Listing rapt-extract contents for debugging..."
-            find rapt-extract -maxdepth 4 -print
+          if [ -z "$CONFIGURE_PY" ]; then
+            echo "::error::Could not find configure.py in the extracted RAPT archive."
+            echo "Contents of rapt-extract:"
+            find rapt-extract -print
             exit 1
           fi
           
-          echo "Found RAPT at: $RAPT_DIR"
-          # Ensure renpy-sdk exists
+          echo "Found configure.py at: $CONFIGURE_PY"
+          RAPT_DIR=$(dirname "$CONFIGURE_PY")
+          echo "RAPT directory identified at: $RAPT_DIR"
+          
           if [ ! -d renpy-sdk ]; then
             echo "::error::renpy-sdk directory not found; expected it to be created by previous step."
             ls -la || true
             exit 1
           fi
           
-          # Move the located rapt folder into renpy-sdk/rapt (normalize name)
           rm -rf renpy-sdk/rapt || true
           mv "$RAPT_DIR" renpy-sdk/rapt
           
-          # Make sure python scripts are executable
           find renpy-sdk/rapt -type f -name "*.py" -exec chmod +x {} \; || true
           
-          echo "Contents of renpy-sdk (after RAPT install):"
-          ls -la renpy-sdk || true
+          echo "Contents of renpy-sdk/rapt after installation:"
+          ls -la renpy-sdk/rapt || true
           
-          if [ ! -d "renpy-sdk/rapt" ]; then
-            echo "::error::Failed to move RAPT folder correctly into renpy-sdk/rapt."
+          if [ ! -f "renpy-sdk/rapt/configure.py" ]; then
+            echo "::error::configure.py not found in renpy-sdk/rapt after move operation."
+            echo "Contents of renpy-sdk:"
             ls -la renpy-sdk || true
             exit 1
-          else
-            echo "RAPT successfully installed into renpy-sdk/rapt"
           fi
           
-          # Export RAPT root so later steps can reference it directly if desired
+          echo "RAPT successfully installed into renpy-sdk/rapt"
           echo "RAPT_ROOT=$(pwd)/renpy-sdk/rapt" >> $GITHUB_ENV
         shell: bash
-      # ===================================================================
 
       - name: Install Android cmdline-tools & SDK packages
         run: |
@@ -167,7 +160,6 @@ jobs:
       - name: Configure RAPT (Ren'Py Android Packaging Tool)
         run: |
           set -euo pipefail
-          # RENPY_ROOT is set in a previous step
           if [ -z "${RENPY_ROOT:-}" ]; then
             echo "::error::RENPY_ROOT not set in environment. Did Ren'Py extraction step succeed?"
             env | sort
@@ -181,7 +173,6 @@ jobs:
             exit 1
           fi
           
-          # Ensure Android SDK/NDK env vars are present
           if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
             echo "::warning::ANDROID_SDK_ROOT not set; attempting to read from GITHUB_ENV fallback."
           fi
@@ -189,7 +180,6 @@ jobs:
             echo "::warning::ANDROID_NDK_HOME not set; ensure Android SDK installation step ran successfully."
           fi
 
-          # Run configure.py from RAPT; pass explicit paths
           cd "$RAPT_DIR"
           echo "Running: python3 configure.py --android-sdk \"$ANDROID_SDK_ROOT\" --android-api ${{ env.ANDROID_API }} --android-ndk \"$ANDROID_NDK_HOME\""
           python3 configure.py --android-sdk "$ANDROID_SDK_ROOT" --android-api ${{ env.ANDROID_API }} --android-ndk "$ANDROID_NDK_HOME"
