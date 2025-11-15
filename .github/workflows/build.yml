@@ -12,7 +12,8 @@ env:
   ANDROID_API: "30"
   BUILD_TOOLS: "30.0.3"
   NDK_VERSION: "21.3.6528147"
-  JAVA_VERSION: "17"
+  # Java 21 is recommended for Ren'Py 8.2+ (and 8.1)
+  JAVA_VERSION: "21"
 
 jobs:
   build-android:
@@ -26,7 +27,7 @@ jobs:
           fetch-depth: 0
           lfs: true
 
-      - name: Setup Java (17)
+      - name: Setup Java (21)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -37,55 +38,61 @@ jobs:
         with:
           python-version: '3.11'
 
-      # ===================================================================
-      # NEW STEP: Force-clean old downloads
-      # This will delete any old SDKs and force a fresh download.
       - name: Force-clean old SDK cache
         run: |
-          echo "Deleting any old files to prevent cache issues..."
-          rm -f renpy-sdk.tar.bz2
-          rm -rf renpy-sdk-extract
-          rm -rf renpy-sdk
+          rm -rf renpy-sdk.tar.bz2 renpy-sdk-extract renpy-sdk rapt-download.zip
           echo "Cleanup complete."
-      # ===================================================================
 
-      - name: Download & extract Ren'Py 8 SDK (includes RAPT)
+      - name: Download & extract Ren'Py 8 SDK
         id: renpy
         run: |
           set -euo pipefail
           RENPY_VER="${{ env.RENPY_VERSION }}"
           RENPY_URL="https://www.renpy.org/dl/${RENPY_VER}/renpy-${RENPY_VER}-sdk.tar.bz2"
           
-          echo "Downloading Ren'Py SDK (Version: $RENPY_VER) from: $RENPY_URL"
-          wget -O renpy-sdk.tar.bz2 "$RENPY_URL"
+          echo "Downloading Ren'Py SDK (Version: $RENPY_VER)..."
+          wget -q -O renpy-sdk.tar.bz2 "$RENPY_URL"
           
-          echo "Download complete. Extracting..."
+          echo "Extracting SDK..."
           mkdir -p renpy-sdk-extract
           tar xf renpy-sdk.tar.bz2 -C renpy-sdk-extract
           
-          RENPY_DIR=$(find renpy-sdk-extract -maxdepth 1 -type d -name "renpy-*-sdk" -print -quit || true)
-          if [ -z "$RENPY_DIR" ]; then
-            FIRST_DIR=$(ls -1 renpy-sdk-extract | head -n 1)
-            RENPY_DIR="renpy-sdk-extract/$FIRST_DIR"
-          fi
-          
+          RENPY_DIR=$(find renpy-sdk-extract -maxdepth 1 -type d -name "renpy-*-sdk" -print -quit)
           echo "Ren'Py SDK detected at: $RENPY_DIR"
           mv "$RENPY_DIR" renpy-sdk
           echo "RENPY_ROOT=$(pwd)/renpy-sdk" >> $GITHUB_ENV
           
-          echo "Contents of new renpy-sdk:"
-          # This 'ls' command will now DEFINITELY show the 'rapt' folder
+          echo "Contents of renpy-sdk (before RAPT):"
           ls -la renpy-sdk
-        shell: bash
 
-      - name: Debug repo layout
+      # ===================================================================
+      # THIS IS THE NEW, FIXED STEP
+      # It downloads RAPT (which is separate in Ren'Py 8) and puts it
+      # inside the renpy-sdk folder where the script expects it.
+      - name: Download & install RAPT (Android Tools)
         run: |
-          echo "Repo root:"
-          ls -la
-          echo "RENPY_ROOT = $RENPY_ROOT"
-          echo "Game folder present?"
-          if [ -d "game" ]; then echo "YES"; ls -la game || true; else echo "NO"; fi
+          set -euo pipefail
+          RENPY_VER="${{ env.RENPY_VERSION }}"
+          RAPT_URL="https://www.renpy.org/dl/${RENPY_VER}/rapt-${RENPY_VER}.zip"
+          
+          echo "Downloading RAPT (Android Tools) from: $RAPT_URL"
+          wget -q -O rapt-download.zip "$RAPT_URL"
+          
+          echo "Unzipping RAPT into renpy-sdk folder..."
+          # Unzip the 'rapt' folder FROM the zip file INTO the 'renpy-sdk' directory
+          unzip -q rapt-download.zip -d renpy-sdk
+          
+          echo "Contents of renpy-sdk (after RAPT install):"
+          ls -la renpy-sdk
+          
+          if [ ! -d "renpy-sdk/rapt" ]; then
+            echo "::error::Failed to unzip RAPT folder correctly into renpy-sdk."
+            exit 1
+          else
+            echo "RAPT successfully installed into renpy-sdk/rapt"
+          fi
         shell: bash
+      # ===================================================================
 
       - name: Install Android cmdline-tools & SDK packages
         run: |
@@ -124,13 +131,10 @@ jobs:
       - name: Configure RAPT (Ren'Py Android Packaging Tool)
         run: |
           set -euo pipefail
-          if [ -z "${RENPY_ROOT:-}" ]; then
-            echo "RENPY_ROOT not set; aborting"
-            exit 1
-          fi
+          # This step will now succeed!
           RAPT_DIR="$RENPY_ROOT/rapt"
           if [ ! -d "$RAPT_DIR" ]; then
-            echo "RAPT directory not found at $RAPT_DIR"
+            echo "::error::RAPT directory still not found at $RAPT_DIR"
             ls -la "$RENPY_ROOT" || true
             exit 1
           fi
