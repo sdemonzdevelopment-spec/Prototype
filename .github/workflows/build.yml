@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  RENPY_VERSION: "7.6.3"          # Using Ren'Py 7.x which bundles RAPT
+  RENPY_VERSION: "7.6.3"          # Using Ren'Py 7.x
   ANDROID_API: "30"               # Android API level to install
   BUILD_TOOLS: "30.0.3"           # Build tools compatible with NDK 21
   NDK_VERSION: "21.3.6528147"     # Known-good NDK for Ren'Py 7
@@ -48,7 +48,7 @@ jobs:
       - name: Ensure pip packaging tools
         run: python3 -m pip install --upgrade pip setuptools wheel
 
-      - name: Download & extract Ren'Py 7 SDK (includes RAPT)
+      - name: Download & extract Ren'Py 7 SDK
         id: renpy
         run: |
           set -euo pipefail
@@ -102,34 +102,21 @@ jobs:
           rm -f tools.zip || true
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          # Set Android env vars for Ren'Py 7 to pick up
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${{ env.NDK_VERSION }}" >> $GITHUB_ENV
           echo "Installing Android SDK components..."
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
             "platform-tools" \
             "platforms;android-${{ env.ANDROID_API }}" \
             "build-tools;${{ env.BUILD_TOOLS }}" \
             "ndk;${{ env.NDK_VERSION }}" || true
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${{ env.NDK_VERSION }}" >> $GITHUB_ENV
           echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
         shell: bash
 
-      - name: Configure RAPT (Ren'Py Android Packaging Tool)
-        run: |
-          set -euo pipefail
-          if [ -z "${RENPY_ROOT:-}" ]; then
-            echo "RENPY_ROOT not set; aborting"
-            exit 1
-          fi
-          RAPT_DIR="$RENPY_ROOT/rapt"
-          if [ ! -d "$RAPT_DIR" ]; then
-            echo "RAPT directory not found at $RAPT_DIR"
-            ls -la "$RENPY_ROOT" || true
-            exit 1
-          fi
-          cd "$RAPT_DIR"
-          python3 configure.py --android-sdk "$ANDROID_SDK_ROOT" --android-api ${{ env.ANDROID_API }} --android-ndk "$ANDROID_NDK_HOME"
-          echo "RAPT configured."
-        shell: bash
+      # THIS STEP IS REMOVED - Ren'Py 7 doesn't use rapt/configure.py
+      # It picks up the ANDROID_SDK_ROOT and ANDROID_NDK_HOME env vars automatically.
+      # - name: Configure RAPT (Ren'Py Android Packaging Tool) ...
 
       - name: Copy game files into Ren'Py SDK
         run: |
@@ -150,24 +137,30 @@ jobs:
       - name: Build Android APK (release)
         run: |
           set -euo pipefail
-          cd "$RENPY_ROOT/rapt"
-          echo "Starting RAPT android build..."
-          python3 android.py build "$RENPY_ROOT/game" --package com.demonz.development.demo --name "DemonZ Prototype" --version "1.0.0" --numeric-version 1 --orientation landscape release
+          # Go to the Ren'Py SDK root, not a 'rapt' folder
+          cd "$RENPY_ROOT"
+          chmod +x renpy.sh
+          echo "Starting Ren'Py 7 android build..."
+          # Call renpy.sh directly, telling it to build the 'game' project
+          ./renpy.sh game android_build --package com.demonz.development.demo --name "DemonZ Prototype" --version "1.0.0" --numeric-version 1 --orientation landscape release
         shell: bash
 
       - name: Find artifacts (debug)
         run: |
-          echo "Listing renpy-rapt output folder:"
-          ls -la "$RENPY_ROOT/rapt/bin" || true
-          echo "Searching for APK/AAB files in workspace:"
-          find . -type f \( -iname "*.apk" -o -iname "*.aab" \) -print || true
+          echo "Listing potential APK/AAB locations:"
+          echo "Searching for APK/AAB files in $RENPY_ROOT/game:"
+          # The build output is inside the project folder for Ren'Py 7
+          find "$RENPY_ROOT/game" -type f \( -iname "*.apk" -o -iname "*.aab" \) -print || true
+          echo "Listing $RENPY_ROOT/game/app/build/outputs/apk/release/:"
+          ls -la "$RENPY_ROOT/game/app/build/outputs/apk/release/" || true
         shell: bash
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: renpy-android-build
+          # Ren'Py 7 builds the APK inside the project's 'android' dir
           path: |
-            $RENPY_ROOT/rapt/bin/*.apk
-            **/*.apk
-            **/*.aab
+            $RENPY_ROOT/game/app/build/outputs/apk/release/*.apk
+            $RENPY_ROOT/game/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: warn # Don't fail the job if paths are slightly different
