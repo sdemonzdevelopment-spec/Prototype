@@ -1,0 +1,125 @@
+name: Build & Sign Ren'Py Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  RENPY_VERSION: '8.2.6'        # change if needed
+  ANDROID_PLATFORM: 'android-33'
+  BUILD_TOOLS: '33.0.2'
+  NDK_VERSION: '21.3.6528147'
+  ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up Java 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Install Android SDK command-line tools & packages
+        run: |
+          set -e
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          cd $ANDROID_SDK_ROOT/cmdline-tools
+          curl -sSLo commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
+          unzip -qq commandlinetools.zip -d $ANDROID_SDK_ROOT/cmdline-tools/latest
+          export PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;${ANDROID_PLATFORM}" "build-tools;${BUILD_TOOLS}" "ndk;${NDK_VERSION}"
+        shell: bash
+
+      - name: Add Android tools to PATH
+        run: echo "$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/build-tools/${{ env.BUILD_TOOLS }}" >> $GITHUB_PATH
+
+      - name: Setup Ren'Py CLI
+        uses: remarkablegames/setup-renpy@v1
+        with:
+          renpy-version: ${{ env.RENPY_VERSION }}
+
+      - name: Show versions (sanity)
+        run: |
+          java -version
+          sdkmanager --version || true
+          adb --version || true
+          renpy-cli --version
+        shell: bash
+
+      - name: Prepare keystore (optional; base64)
+        if: secrets.RENPY_KEYSTORE_BASE64 != ''
+        run: |
+          echo "${{ secrets.RENPY_KEYSTORE_BASE64 }}" | base64 -d > ./release-keystore.jks
+          ls -l ./release-keystore.jks
+
+      - name: Run Ren'Py Android build
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+        run: |
+          set -e
+          echo "Starting Ren'Py packaging..."
+          # Adjust the path ./game if your project lives under a different folder
+          renpy-cli ./renpy --package android ./game || (echo "Ren'Py packaging failed" && exit 1)
+        shell: bash
+
+      - name: Locate APK/AAB outputs
+        run: |
+          echo "Looking for APK/AAB files..."
+          find . -type f \( -iname "*.apk" -o -iname "*.aab" \) -print || true
+        shell: bash
+
+      - name: Zipalign & Sign APKs (if keystore provided)
+        if: secrets.RENPY_KEYSTORE_BASE64 != ''
+        env:
+          BUILD_TOOLS: ${{ env.BUILD_TOOLS }}
+        run: |
+          set -e
+          APKS=$(find . -type f -iname "*.apk" -print || true)
+          if [ -z "$APKS" ]; then
+            echo "No APKs found to sign."
+            exit 0
+          fi
+          for apk in $APKS; do
+            echo "Processing $apk"
+            aligned="${apk%.apk}-aligned.apk"
+            signed="${apk%.apk}-signed.apk"
+            # zipalign
+            "$ANDROID_SDK_ROOT/build-tools/${BUILD_TOOLS}/zipalign" -v -p 4 "$apk" "$aligned"
+            # apksigner sign (in-place would sign aligned; here we sign aligned into same file)
+            "$ANDROID_SDK_ROOT/build-tools/${BUILD_TOOLS}/apksigner" sign \
+              --ks ./release-keystore.jks \
+              --ks-pass pass:${{ secrets.RENPY_KEYSTORE_PASSWORD }} \
+              --key-pass pass:${{ secrets.RENPY_KEY_PASSWORD }} \
+              --out "$signed" "$aligned"
+            echo "Signed: $signed"
+          done
+        shell: bash
+
+      - name: Upload APK/AAB artifacts
+        run: |
+          echo "Uploading artifacts..."
+        shell: bash
+
+      - name: Upload built artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: renpy-android-build
+          path: |
+            **/*-signed.apk
+            **/*.apk
+            **/*.aab
+
+      - name: Cleanup keystore
+        if: secrets.RENPY_KEYSTORE_BASE64 != ''
+        run: |
+          shred -u ./release-keystore.jks || rm -f ./release-keystore.jks
+        shell: bash
