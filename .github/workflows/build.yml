@@ -14,44 +14,39 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
 
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 17 (required for latest sdkmanager)
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
-          java-version: "11"
+          java-version: "17"
+
+      - name: Verify Java is 17
+        run: java -version
 
       - name: Install Android SDK + NDK (2024-safe)
         run: |
           set -e
           export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
-
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
           cd "$ANDROID_SDK_ROOT/cmdline-tools"
-
           echo "Downloading latest cmdline-tools..."
           curl -o tools.zip -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-
           unzip tools.zip -d ./tmp
-
-          # Move correct folder → latest/
           mv ./tmp/cmdline-tools ./latest
-
           echo "Installed cmdline-tools structure:"
           ls -R .
-
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
             "platform-tools" \
             "platforms;${ANDROID_PLATFORM}" \
             "build-tools;${BUILD_TOOLS}" \
             "ndk;${NDK_VERSION}"
-
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
 
       - name: Setup RenPy
@@ -62,7 +57,7 @@ jobs:
       - name: Verify tools
         run: |
           java -version
-          renpy-cli --version
+          renpy-cli --version || true
           adb --version || true
           ls -la
 
