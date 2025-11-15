@@ -1,5 +1,6 @@
       - name: Install Android SDK + NDK (2024-safe)
         run: |
+          # <-- THIS INDENTATION IS REQUIRED
           set -e
           export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
@@ -26,4 +27,3 @@
             "ndk;${NDK_VERSION}"
             
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-        shell: bash
