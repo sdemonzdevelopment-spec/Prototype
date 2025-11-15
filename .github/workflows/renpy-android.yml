@@ -1,0 +1,68 @@
+name: Build Ren'Py Android
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Install Android SDK cmdline-tools + sdkmanager
+        run: |
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          cd $ANDROID_SDK_ROOT/cmdline-tools
+          curl -sSLo commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
+          unzip -qq commandlinetools.zip -d $ANDROID_SDK_ROOT/cmdline-tools/latest
+          export PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;21.3.6528147"
+        shell: bash
+
+      - name: Setup Ren'Py CLI
+        uses: remarkablegames/setup-renpy@v1
+        with:
+          renpy-version: '8.2.6'
+
+      - name: Show renpy version
+        run: renpy-cli --version
+
+      - name: Prepare keystore (from secret, base64-encoded)
+        if: secrets.RENPY_KEYSTORE_BASE64 != ''
+        run: |
+          echo "${{ secrets.RENPY_KEYSTORE_BASE64 }}" | base64 -d > ./release-keystore.jks
+          ls -l ./release-keystore.jks
+
+      - name: Build Android package
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+        run: |
+          renpy-cli ./renpy --package android ./game
+        shell: bash
+
+      - name: Collect Android artifacts
+        run: |
+          find . -type f -name "*.apk" -o -name "*.aab" -maxdepth 6 -print
+        shell: bash
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: renpy-android-build
+          path: |
+            **/*.apk
+            **/*.aab
