@@ -1,29 +1,172 @@
-      - name: Install Android SDK + NDK (2024-safe)
+name: Build Ren'Py Android (Robust)
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+env:
+  RENPY_VERSION: "8.2.1"         # change if you want another Ren'Py
+  ANDROID_API: "34"
+  BUILD_TOOLS: "34.0.0"
+  NDK_VERSION: "25.2.9519653"
+  JAVA_VERSION: "17"
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Set up JDK (Java 17 required for sdkmanager)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Verify Java version
+        run: java -version
+
+      - name: Install system packages (needed for building)
         run: |
-          # <-- THIS INDENTATION IS REQUIRED
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip python3-dev build-essential unzip wget curl
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python packaging tools
+        run: |
+          python3 -m pip install --upgrade pip setuptools wheel
+
+      - name: Download & extract Ren'Py SDK
+        id: renpy_download
+        run: |
           set -e
-          export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
+          # Download Ren'Py SDK tarball. If URL format differs for your Ren'Py version, update it.
+          RENPY_VER=${{ env.RENPY_VERSION }}
+          URL="https://www.renpy.org/dl/${RENPY_VER}/renpy-${RENPY_VER}-sdk.tar.bz2"
+          echo "Downloading Ren'Py SDK from $URL"
+          wget -q -O renpy-sdk.tar.bz2 "$URL"
+          mkdir -p renpy-sdk-extract
+          tar xf renpy-sdk.tar.bz2 -C renpy-sdk-extract
+          # The archive usually extracts to 'renpy-<version>-sdk' directory; find it dynamically
+          RENPY_DIR=$(find renpy-sdk-extract -maxdepth 1 -type d -name "renpy-*-sdk" -print -quit)
+          if [ -z "$RENPY_DIR" ]; then
+            # fallback — maybe it's already named differently
+            RENPY_DIR=$(ls renpy-sdk-extract | head -n 1)
+            RENPY_DIR="renpy-sdk-extract/$RENPY_DIR"
+          fi
+          echo "Ren'Py SDK located at: $RENPY_DIR"
+          # Move to a stable folder
+          mv "$RENPY_DIR" renpy-sdk
+          echo "RENPY_ROOT=$(pwd)/renpy-sdk" >> $GITHUB_ENV
+          ls -la renpy-sdk
+
+      - name: Debug — confirm repo layout
+        run: |
+          echo "Repository root listing:"
+          ls -la
+          echo "game/ exists?:"
+          if [ -d "game" ]; then echo "game present"; ls -la game || true; else echo "game NOT found"; fi
+          echo "Ren'Py SDK root: $RENPY_ROOT"
+          ls -la "$RENPY_ROOT" || true
+
+      - name: Install Android SDK command-line tools & packages
+        run: |
+          set -e
+          # Use runner temp dir for SDK install to avoid workspace issues
+          ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
           cd "$ANDROID_SDK_ROOT/cmdline-tools"
-          
-          echo "Downloading latest cmdline-tools..."
-          curl -o tools.zip -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          echo "Downloading Android cmdline-tools (safe pinned URL)..."
+          wget -q -O tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -qq tools.zip -d ./tmp
-          mv ./tmp/cmdline-tools ./latest
-          
-          # Add the new tools to the PATH for *this step*
+          # move the inner cmdline-tools folder into 'latest' (safe for different archive layouts)
+          if [ -d ./tmp/cmdline-tools ]; then
+            mv ./tmp/cmdline-tools ./latest
+          else
+            # some packages extract differently; attempt to find the folder
+            FOUND=$(find ./tmp -maxdepth 2 -type d -name "cmdline-tools" -print -quit)
+            if [ -n "$FOUND" ]; then
+              mv "$FOUND" ./latest
+            else
+              # fallback: move tmp/* to latest
+              mv ./tmp/* ./latest || true
+            fi
+          fi
+          rm -f tools.zip || true
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-          
-          echo "Accepting SDK licenses..."
-          # FIX 1: Run license acceptance as a separate, dedicated command.
-          yes | sdkmanager --licenses --sdk_root="$ANDROID_SDK_ROOT"
-          
-          echo "Installing SDK components..."
-          # FIX 2: Install packages *without* the 'yes' pipe, as licenses are already accepted.
-          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" \
-            "platform-tools" \
-            "platforms;${ANDROID_PLATFORM}" \
-            "build-tools;${BUILD_TOOLS}" \
-            "ndk;${NDK_VERSION}"
-            
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+
+          echo "Accepting licenses and installing platform-tools/platforms/build-tools/ndk..."
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --install \
+            "platform-tools" \
+            "platforms;android-${{ env.ANDROID_API }}" \
+            "build-tools;${{ env.BUILD_TOOLS }}" \
+            "ndk;${{ env.NDK_VERSION }}" || true
+
+          echo "Android SDK installed to $ANDROID_SDK_ROOT"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${{ env.NDK_VERSION }}" >> $GITHUB_ENV
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
+
+      - name: Configure Ren'Py Android packaging tool (RAPT)
+        run: |
+          set -e
+          # RAPT scripts live in renpy-sdk/rapt (for many Ren'Py versions)
+          RAPT_DIR="$RENPY_ROOT/rapt"
+          if [ ! -d "$RAPT_DIR" ]; then
+            echo "RAPT directory not found at $RAPT_DIR"
+            ls -la "$RENPY_ROOT" || true
+            exit 1
+          fi
+          cd "$RAPT_DIR"
+          python3 configure.py --android-sdk "$ANDROID_SDK_ROOT" --android-api ${{ env.ANDROID_API }} --android-ndk "$ANDROID_NDK_HOME"
+          echo "RAPT configured"
+
+      - name: Copy game files into Ren'Py SDK
+        run: |
+          set -e
+          if [ -d "game" ]; then
+            # copy game folder into renpy-sdk/game (overwrites if present)
+            rm -rf "$RENPY_ROOT/game" || true
+            cp -r game "$RENPY_ROOT/game"
+            echo "Copied game/ to $RENPY_ROOT/game"
+          else
+            echo "Error: 'game' directory not found in repository root"
+            exit 1
+          fi
+          # Copy optional top-level options.rpy and other files if user included them at repo root
+          if [ -f "options.rpy" ]; then
+            cp options.rpy "$RENPY_ROOT/game/" || true
+          fi
+
+      - name: Build Android APK (via RAPT)
+        run: |
+          set -e
+          cd "$RENPY_ROOT/rapt"
+          # Use python3 android.py build ... release (RAPT uses android.py)
+          # Adjust package/name/version as needed for your game
+          python3 android.py build "$RENPY_ROOT/game" --package com.demonz.development.demo --name "DemonZ Prototype" --version "1.0.0" --numeric-version 1 --orientation landscape release
+
+      - name: Find outputs & upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: renpy-android-build
+          path: |
+            $RENPY_ROOT/rapt/bin/*.apk
+            **/*.apk
+            **/*.aab
+          retention-days: 30
