@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  RENPY_VERSION: "7.6.3"          # Using Ren'Py 7.x
+  RENPY_VERSION: "8.1.3"          # Using Ren'Py 7.x
   ANDROID_API: "30"               # Android API level to install
   BUILD_TOOLS: "30.0.3"           # Build tools compatible with NDK 21
   NDK_VERSION: "21.3.6528147"     # Known-good NDK for Ren'Py 7
