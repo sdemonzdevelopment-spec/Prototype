@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  RENPY_VERSION: '8.2.6'        # change if needed
+  RENPY_VERSION: '8.2.6'
   ANDROID_PLATFORM: 'android-33'
   BUILD_TOOLS: '33.0.2'
   NDK_VERSION: '21.3.6528147'
@@ -17,12 +17,12 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           lfs: true
 
-      - name: Debug: show runner info
+      - name: Debug — show runner info
         run: |
           echo "GITHUB_WORKFLOW: $GITHUB_WORKFLOW"
           echo "GITHUB_REF: $GITHUB_REF"
@@ -40,7 +40,7 @@ jobs:
           distribution: 'temurin'
           java-version: '11'
 
-      - name: Prepare ANDROID_SDK_ROOT and install Android SDK command-line tools
+      - name: Prepare Android SDK root and install cmdline-tools
         run: |
           set -e
           export ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
@@ -58,7 +58,7 @@ jobs:
       - name: Add Android SDK tools to PATH
         run: |
           echo "$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/build-tools/${BUILD_TOOLS}" >> $GITHUB_PATH
-          echo "PATH now includes Android tools"
+          echo "PATH updated with Android tools"
         shell: bash
 
       - name: Setup Ren'Py CLI
@@ -74,53 +74,53 @@ jobs:
           renpy-cli --version || true
         shell: bash
 
-      - name: Prepare keystore variables (if present)
-        # safely assign secrets into environment variables for this step only
+      - name: Prepare keystore (if provided) — decode from secrets in-step
         env:
           RENPY_KEYSTORE_BASE64: ${{ secrets.RENPY_KEYSTORE_BASE64 }}
           RENPY_KEYSTORE_PASSWORD: ${{ secrets.RENPY_KEYSTORE_PASSWORD }}
           RENPY_KEY_ALIAS: ${{ secrets.RENPY_KEY_ALIAS }}
           RENPY_KEY_PASSWORD: ${{ secrets.RENPY_KEY_PASSWORD }}
         run: |
-          echo "Checking if keystore secret is present..."
+          set -e
           if [ -n "$RENPY_KEYSTORE_BASE64" ]; then
-            echo "Keystore base64 is set (length: ${#RENPY_KEYSTORE_BASE64})"
-            echo "Decoding to ./release-keystore.jks"
+            echo "Decoding provided keystore into ./release-keystore.jks"
             echo "$RENPY_KEYSTORE_BASE64" | base64 -d > ./release-keystore.jks
             ls -l ./release-keystore.jks
           else
-            echo "No keystore secret provided — builds will be unsigned."
+            echo "No keystore secret provided; builds will be unsigned."
           fi
         shell: bash
 
-      - name: Print workspace before build (debug)
+      - name: Debug — list workspace and game folder
         run: |
-          echo "Workspace files (top-level):"
+          echo "Top-level files:"
           ls -la
-          echo "Contents of game/ (if present):"
+          echo "game/ contents (if present):"
           ls -la game || true
         shell: bash
 
       - name: Run Ren'Py Android build
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
         run: |
           set -e
           echo "Using ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
           echo "Starting Ren'Py packaging..."
+          # Adjust path if your Ren'Py/game folder is different
           renpy-cli ./renpy --package android ./game || (echo "Ren'Py packaging failed" && exit 1)
         shell: bash
 
       - name: Locate APK/AAB outputs
         run: |
-          echo "Looking for APK/AAB files..."
+          echo "Finding APK/AAB files in workspace..."
           find . -type f \( -iname "*.apk" -o -iname "*.aab" \) -maxdepth 8 -print || true
         shell: bash
 
-      - name: Zipalign & sign APKs (if keystore file exists)
+      - name: Zipalign & sign APKs (only if keystore file exists)
         run: |
           set -e
-          # signing will only run if release-keystore.jks file exists (created earlier)
           if [ -f "./release-keystore.jks" ]; then
-            echo "release-keystore.jks found: signing APKs..."
+            echo "Keystore detected; signing APKs..."
             APKS=$(find . -type f -iname "*.apk" -print || true)
             if [ -z "$APKS" ]; then
               echo "No APKs found to sign."
