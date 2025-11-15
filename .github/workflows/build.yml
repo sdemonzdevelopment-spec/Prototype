@@ -180,9 +180,10 @@ jobs:
             echo "::warning::ANDROID_NDK_HOME not set; ensure Android SDK installation step ran successfully."
           fi
 
-          cd "$RAPT_DIR"
-          echo "Running: python3 configure.py --android-sdk \"$ANDROID_SDK_ROOT\" --android-api ${{ env.ANDROID_API }} --android-ndk \"$ANDROID_NDK_HOME\""
-          python3 configure.py --android-sdk "$ANDROID_SDK_ROOT" --android-api ${{ env.ANDROID_API }} --android-ndk "$ANDROID_NDK_HOME"
+          echo "Running RAPT configuration with explicit Python module execution..."
+          # Use python -m to run configure as a module, avoiding relative import issues
+          cd "$RENPY_ROOT"
+          python3 -m rapt.configure --android-sdk "$ANDROID_SDK_ROOT" --android-api ${{ env.ANDROID_API }} --android-ndk "$ANDROID_NDK_HOME"
           echo "RAPT configured."
         shell: bash
 
@@ -205,9 +206,9 @@ jobs:
       - name: Build Android APK (release)
         run: |
           set -euo pipefail
-          cd "$RENPY_ROOT/rapt"
+          cd "$RENPY_ROOT"
           echo "Starting RAPT android build..."
-          python3 android.py build "$RENPY_ROOT/game" --package com.demonz.development.demo --name "DemonZ Prototype" --version "1.0.0" --numeric-version 1 --orientation landscape release
+          python3 -m rapt.android build "$RENPY_ROOT/game" --package com.demonz.development.demo --name "DemonZ Prototype" --version "1.0.0" --numeric-version 1 --orientation landscape release
         shell: bash
 
       - name: Find artifacts (debug)
