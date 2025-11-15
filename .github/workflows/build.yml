@@ -8,7 +8,8 @@ on:
   workflow_dispatch:
 
 env:
-  # This is the only line that really needed to change from your original file
+  # THIS IS THE FIXED LINE:
+  # Changed from 7.6.3 to 8.1.3 so the 'rapt' folder exists.
   RENPY_VERSION: "8.1.3"
   ANDROID_API: "30"
   BUILD_TOOLS: "30.0.3"
@@ -59,6 +60,7 @@ jobs:
           wget -q -O renpy-sdk.tar.bz2 "$RENPY_URL"
           mkdir -p renpy-sdk-extract
           tar xf renpy-sdk.tar.bz2 -C renpy-sdk-extract
+          # find extracted renpy folder
           RENPY_DIR=$(find renpy-sdk-extract -maxdepth 1 -type d -name "renpy-*-sdk" -print -quit || true)
           if [ -z "$RENPY_DIR" ]; then
             FIRST_DIR=$(ls -1 renpy-sdk-extract | head -n 1)
@@ -163,12 +165,11 @@ jobs:
           find . -type f \( -iname "*.apk" -o -iname "*.aab" \) -print || true
         shell: bash
 
-      # THIS IS THE CORRECTED STEP
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: renpy-android-build
-          # This is the correct path for Ren'Py 8
+          # This path is correct for Ren'Py 8
           path: |
             $RENPY_ROOT/rapt/bin/*.apk
             $RENPY_ROOT/rapt/bin/*.aab
