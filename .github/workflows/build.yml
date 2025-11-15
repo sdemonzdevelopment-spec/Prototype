@@ -40,7 +40,7 @@ jobs:
 
       - name: Force-clean old SDK cache
         run: |
-          rm -rf renpy-sdk.tar.bz2 renpy-sdk-extract renpy-sdk rapt-download.zip
+          rm -rf renpy-sdk.tar.bz2 renpy-sdk-extract renpy-sdk rapt-download.zip rapt
           echo "Cleanup complete."
 
       - name: Download & extract Ren'Py 8 SDK
@@ -65,33 +65,36 @@ jobs:
           echo "Contents of renpy-sdk (before RAPT):"
           ls -la renpy-sdk
 
+      # ===================================================================
+      # THIS STEP IS NOW FIXED AND MORE ROBUST
       - name: Download & install RAPT (Android Tools)
         run: |
           set -euo pipefail
           RENPY_VER="${{ env.RENPY_VERSION }}"
-          
-          # ===================================================================
-          # THIS IS THE CORRECTED URL
           RAPT_URL="https://www.renpy.org/dl/${RENPY_VER}/renpy-${RENPY_VER}-rapt.zip"
-          # ===================================================================
           
           echo "Downloading RAPT (Android Tools) from: $RAPT_URL"
-          # Added -q (quiet) back, but if it fails, the exit code will show
           wget -q -O rapt-download.zip "$RAPT_URL"
           
-          echo "Unzipping RAPT into renpy-sdk folder..."
-          unzip -q rapt-download.zip -d renpy-sdk
+          echo "Unzipping RAPT..."
+          # Unzip in the current directory, which will create a 'rapt' folder
+          unzip -q rapt-download.zip
+          
+          echo "Moving RAPT folder into renpy-sdk..."
+          # Explicitly move the 'rapt' folder into the 'renpy-sdk' folder
+          mv rapt renpy-sdk/
           
           echo "Contents of renpy-sdk (after RAPT install):"
           ls -la renpy-sdk
           
           if [ ! -d "renpy-sdk/rapt" ]; then
-            echo "::error::Failed to unzip RAPT folder correctly into renpy-sdk."
+            echo "::error::Failed to move RAPT folder correctly into renpy-sdk."
             exit 1
           else
             echo "RAPT successfully installed into renpy-sdk/rapt"
           fi
         shell: bash
+      # ===================================================================
 
       - name: Install Android cmdline-tools & SDK packages
         run: |
@@ -136,6 +139,8 @@ jobs:
             ls -la "$RENPY_ROOT" || true
             exit 1
           fi
+          
+          # This step will now find the file:
           cd "$RAPT_DIR"
           python3 configure.py --android-sdk "$ANDROID_SDK_ROOT" --android-api ${{ env.ANDROID_API }} --android-ndk "$ANDROID_NDK_HOME"
           echo "RAPT configured."
