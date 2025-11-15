@@ -1,4 +1,4 @@
-name: Build Ren'Py Android (stable)
+name: Build Ren'Py Android (final)
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  RENPY_VERSION: "8.2.1"        # change if you want a different Ren'Py SDK version
+  RENPY_VERSION: "8.2.1"
   ANDROID_API: "34"
   BUILD_TOOLS: "34.0.0"
   NDK_VERSION: "25.2.9519653"
@@ -33,14 +33,15 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Verify Java
-        run: java -version
+        run: |
+          java -version
 
       - name: Install system packages
         run: |
           sudo apt-get update
           sudo apt-get install -y python3 python3-pip python3-dev build-essential unzip wget curl
 
-      - name: Setup Python (no cache to avoid missing-file errors)
+      - name: Setup Python (no cache)
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -54,16 +55,13 @@ jobs:
         run: |
           set -e
           RENPY_VER="${{ env.RENPY_VERSION }}"
-          # Download tarball (URL format expected: renpy-<ver>-sdk.tar.bz2)
           RENPY_URL="https://www.renpy.org/dl/${RENPY_VER}/renpy-${RENPY_VER}-sdk.tar.bz2"
           echo "Downloading Ren'Py SDK from: $RENPY_URL"
           wget -q -O renpy-sdk.tar.bz2 "$RENPY_URL"
           mkdir -p renpy-sdk-extract
           tar xf renpy-sdk.tar.bz2 -C renpy-sdk-extract
-          # find the extracted renpy SDK folder
           RENPY_DIR=$(find renpy-sdk-extract -maxdepth 1 -type d -name "renpy-*-sdk" -print -quit)
           if [ -z "$RENPY_DIR" ]; then
-            # fallback pick first directory in extract
             FIRST_DIR=$(ls -1 renpy-sdk-extract | head -n 1)
             RENPY_DIR="renpy-sdk-extract/$FIRST_DIR"
           fi
@@ -74,24 +72,22 @@ jobs:
 
       - name: Debug repo layout
         run: |
-          echo "Repo root contents:"
+          echo "Repository root listing:"
           ls -la
           echo "game/ exists?:"
           if [ -d "game" ]; then echo "game folder present"; ls -la game || true; else echo "game NOT present"; fi
           echo "RENPY_ROOT = $RENPY_ROOT"
         shell: bash
 
-      - name: Install Android cmdline-tools & packages
+      - name: Install Android cmdline-tools & SDK packages
         run: |
           set -e
-          # Use runner temp for SDK so workspace stays clean
           ANDROID_SDK_ROOT="$RUNNER_TEMP/android-sdk"
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
           cd "$ANDROID_SDK_ROOT/cmdline-tools"
-          echo "Downloading Android command line tools (pinned URL)..."
+          echo "Downloading Android command line tools..."
           wget -q -O tools.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
           unzip -qq tools.zip -d ./tmp
-          # Move inner cmdline-tools folder into 'latest' (handles archive layout variations)
           if [ -d ./tmp/cmdline-tools ]; then
             mv ./tmp/cmdline-tools ./latest
           else
@@ -106,19 +102,23 @@ jobs:
           rm -f tools.zip || true
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "Accepting SDK licenses and installing packages..."
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
             "platform-tools" \
             "platforms;android-${{ env.ANDROID_API }}" \
             "build-tools;${{ env.BUILD_TOOLS }}" \
             "ndk;${{ env.NDK_VERSION }}" || true
-          echo "Android SDK installed to $ANDROID_SDK_ROOT"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${{ env.NDK_VERSION }}" >> $GITHUB_ENV
           echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
+        shell: bash
 
       - name: Configure RAPT (Ren'Py Android Packaging Tool)
         run: |
           set -e
+          if [ -z "$RENPY_ROOT" ]; then
+            echo "RENPY_ROOT not set; aborting"
+            exit 1
+          fi
           RAPT_DIR="$RENPY_ROOT/rapt"
           if [ ! -d "$RAPT_DIR" ]; then
             echo "RAPT directory not found at $RAPT_DIR"
@@ -126,9 +126,8 @@ jobs:
             exit 1
           fi
           cd "$RAPT_DIR"
-          # Use python3 for configure
           python3 configure.py --android-sdk "$ANDROID_SDK_ROOT" --android-api ${{ env.ANDROID_API }} --android-ndk "$ANDROID_NDK_HOME"
-          echo "RAPT configured."
+        shell: bash
 
       - name: Copy game files into Ren'Py SDK
         run: |
@@ -141,9 +140,32 @@ jobs:
             echo "Error: 'game' directory not found in repository root"
             exit 1
           fi
-          # copy optional top-level options.rpy if present
           if [ -f "options.rpy" ]; then
             cp options.rpy "$RENPY_ROOT/game/" || true
           fi
+        shell: bash
 
-      - name: Build
+      - name: Build Android APK (release)
+        run: |
+          set -e
+          cd "$RENPY_ROOT/rapt"
+          echo "Starting RAPT android build..."
+          python3 android.py build "$RENPY_ROOT/game" --package com.demonz.development.demo --name "DemonZ Prototype" --version "1.0.0" --numeric-version 1 --orientation landscape release
+        shell: bash
+
+      - name: Find artifacts (debug)
+        run: |
+          echo "Listing renpy-rapt output folder (if exists):"
+          ls -la "$RENPY_ROOT/rapt/bin" || true
+          echo "Searching for APK/AAB files in workspace:"
+          find . -type f \( -iname "*.apk" -o -iname "*.aab" \) -print || true
+        shell: bash
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: renpy-android-build
+          path: |
+            $RENPY_ROOT/rapt/bin/*.apk
+            **/*.apk
+            **/*.aab
