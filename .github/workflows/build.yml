@@ -12,7 +12,7 @@ env:
   ANDROID_API: "30"
   BUILD_TOOLS: "30.0.3"
   NDK_VERSION: "21.3.6528147"
-  JAVA_VERSION: "11"  # Changed from 21 to 11 for better compatibility
+  JAVA_VERSION: "11"
 
 jobs:
   build-android:
@@ -103,7 +103,6 @@ jobs:
           echo "Python files in archive:"
           find rapt-extract -type f -name "*.py" | head -20
           
-          # Look for the top-level rapt directory that contains all the tools
           RAPT_TOP_DIR=$(find rapt-extract -maxdepth 2 -type d -name "rapt" -print -quit || true)
           
           if [ -z "$RAPT_TOP_DIR" ]; then
@@ -115,7 +114,6 @@ jobs:
           
           echo "Found RAPT directory at: $RAPT_TOP_DIR"
           
-          # Verify this directory contains the necessary files
           if [ ! -f "$RAPT_TOP_DIR/build.py" ] && [ ! -f "$RAPT_TOP_DIR/buildlib/rapt/build.py" ]; then
             echo "::warning::build.py not found in expected locations, searching deeper..."
             find "$RAPT_TOP_DIR" -name "build.py" -o -name "android.py" || true
@@ -144,19 +142,6 @@ jobs:
           
           RAPT_ROOT_PATH="$(pwd)/renpy-sdk/rapt"
           echo "RAPT_ROOT=$RAPT_ROOT_PATH" >> $GITHUB_ENV
-          
-          echo "Searching for build script..."
-          if [ -f "renpy-sdk/rapt/build.py" ]; then
-            echo "Found build.py at root level"
-            echo "BUILD_SCRIPT=build.py" >> $GITHUB_ENV
-          elif [ -f "renpy-sdk/rapt/android.py" ]; then
-            echo "Found android.py at root level"
-            echo "BUILD_SCRIPT=android.py" >> $GITHUB_ENV
-          else
-            echo "::warning::Neither build.py nor android.py found at RAPT root"
-            echo "Attempting to locate build scripts..."
-            find renpy-sdk/rapt -name "build.py" -o -name "android.py" || true
-          fi
         shell: bash
 
       - name: Install Android SDK and tools
@@ -246,7 +231,6 @@ jobs:
             exit 1
           fi
           
-          # Find configure.py wherever it is
           CONFIGURE_SCRIPT=$(find "$RAPT_DIR" -name "configure.py" -type f -print -quit || true)
           
           if [ -z "$CONFIGURE_SCRIPT" ]; then
@@ -265,72 +249,13 @@ jobs:
           echo "  Android API: ${{ env.ANDROID_API }}"
           echo "  Android NDK: $ANDROID_NDK_HOME"
           
-          # FIX: Run configure.py as a module to avoid relative import errors
-          # We need to run from the parent directory and use -m to run as module
           cd "$RAPT_DIR"
+          export PYTHONPATH="$RAPT_DIR:$CONFIGURE_PARENT:$PYTHONPATH"
           
-          # Option 1: Try running from RAPT root with python -m
-          if [[ "$CONFIGURE_SCRIPT" == *"/buildlib/rapt/configure.py" ]]; then
-            echo "Running configure as module from buildlib..."
-            cd buildlib
-            python3 -m rapt.configure \
-              --android-sdk "$ANDROID_SDK_ROOT" \
-              --android-api ${{ env.ANDROID_API }} \
-              --android-ndk "$ANDROID_NDK_HOME"
-          else
-            # Option 2: Run directly but fix Python path
-            echo "Running configure with adjusted PYTHONPATH..."
-            export PYTHONPATH="$RAPT_DIR:$PYTHONPATH"
-            cd "$CONFIGURE_DIR"
-            python3 -c "
-import sys
-import os
-sys.path.insert(0, '$RAPT_DIR')
-sys.path.insert(0, '$CONFIGURE_PARENT')
-exec(open('configure.py').read())
-" --android-sdk "$ANDROID_SDK_ROOT" \
-              --android-api ${{ env.ANDROID_API }} \
-              --android-ndk "$ANDROID_NDK_HOME" || \
-            # Fallback: Try with absolute imports patch
-            (
-              echo "Attempting fallback method..."
-              cd "$RAPT_DIR"
-              python3 << 'PYTHON_SCRIPT'
-import sys
-import os
-
-# Add RAPT directory to path
-rapt_dir = os.getcwd()
-sys.path.insert(0, rapt_dir)
-
-# Find and import configure module
-configure_path = """$CONFIGURE_SCRIPT"""
-configure_dir = os.path.dirname(configure_path)
-sys.path.insert(0, configure_dir)
-sys.path.insert(0, os.path.dirname(configure_dir))
-
-# Mock the arguments
-sys.argv = [
-    'configure.py',
-    '--android-sdk', '$ANDROID_SDK_ROOT',
-    '--android-api', '${{ env.ANDROID_API }}',
-    '--android-ndk', '$ANDROID_NDK_HOME'
-]
-
-# Try to run configure
-try:
-    with open(configure_path, 'r') as f:
-        code = f.read()
-        # Replace relative imports with absolute imports or handle them
-        code = code.replace('from . import', 'import')
-        code = code.replace('from .', 'from ')
-        exec(code, {'__name__': '__main__', '__file__': configure_path})
-except Exception as e:
-    print(f"Error during configuration: {e}")
-    sys.exit(1)
-PYTHON_SCRIPT
-            )
-          fi
+          python3 "$CONFIGURE_SCRIPT" \
+            --android-sdk "$ANDROID_SDK_ROOT" \
+            --android-api ${{ env.ANDROID_API }} \
+            --android-ndk "$ANDROID_NDK_HOME"
           
           echo "RAPT configuration completed successfully"
         shell: bash
@@ -398,7 +323,6 @@ PYTHON_SCRIPT
             exit 1
           fi
           
-          # Search for the build script
           BUILD_SCRIPT=""
           
           if [ -f "$RAPT_DIR/build.py" ]; then
@@ -408,7 +332,6 @@ PYTHON_SCRIPT
             BUILD_SCRIPT="$RAPT_DIR/android.py"
             echo "Using android.py at root level"
           else
-            # Search deeper in the directory structure
             BUILD_SCRIPT=$(find "$RAPT_DIR" -name "build.py" -type f -print -quit || true)
             if [ -z "$BUILD_SCRIPT" ]; then
               BUILD_SCRIPT=$(find "$RAPT_DIR" -name "android.py" -type f -print -quit || true)
@@ -434,29 +357,17 @@ PYTHON_SCRIPT
           echo "  Orientation: landscape"
           echo "  Build type: release"
           
-          # Similar fix for build script - handle relative imports
           cd "$RAPT_DIR"
           export PYTHONPATH="$RAPT_DIR:$PYTHONPATH"
           
-          if [[ "$BUILD_SCRIPT" == *"/buildlib/rapt/build.py" ]]; then
-            cd buildlib
-            python3 -m rapt.build build "$RENPY_ROOT/game" \
-              --package com.demonz.development.demo \
-              --name "DemonZ Prototype" \
-              --version "1.0.0" \
-              --numeric-version 1 \
-              --orientation landscape \
-              release
-          else
-            cd "$BUILD_DIR"
-            python3 "$BUILD_NAME" build "$RENPY_ROOT/game" \
-              --package com.demonz.development.demo \
-              --name "DemonZ Prototype" \
-              --version "1.0.0" \
-              --numeric-version 1 \
-              --orientation landscape \
-              release
-          fi
+          cd "$BUILD_DIR"
+          python3 "$BUILD_NAME" build "$RENPY_ROOT/game" \
+            --package com.demonz.development.demo \
+            --name "DemonZ Prototype" \
+            --version "1.0.0" \
+            --numeric-version 1 \
+            --orientation landscape \
+            release
           
           echo "Android build completed"
         shell: bash
@@ -474,7 +385,6 @@ PYTHON_SCRIPT
           echo "Searching entire workspace for APK and AAB files:"
           find . -type f ( -iname "*.apk" -o -iname "*.aab" ) -exec ls -lh {} ; || echo "No APK or AAB files found yet"
           
-          # Check common output locations
           POSSIBLE_LOCATIONS=(
             "$RENPY_ROOT/rapt/bin"
             "$RENPY_ROOT/rapt/project/app/build/outputs/apk"
