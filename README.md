@@ -1,34 +1,32 @@
-# DemonZ: Echoes of the Forgotten - Prototype (GitHub repo)
+# DemonZ: Echoes of the Forgotten - Prototype
 
-This repository contains a Ren'Py visual novel prototype prepared for DemonZ Development,
-optimized assets, and a GitHub Actions workflow to build Android artifacts on push.
+Welcome to the public release of the DemonZ: Echoes of the Forgotten visual novel prototype! This project demonstrates a Ren'Py-powered visual novel developed by DemonZ Development.
 
-## Contents
-- `game/` - Ren'Py project files (images, audio, script.rpy)
-- `.github/workflows/renpy-android.yml` - CI workflow to build Android package on Ubuntu runners.
+## What is this?
+This is a playable prototype intended for public demo and feedback. Download and enjoy the story, artwork, and music—no programming or asset editing needed.
 
-## Quick start (on Android or desktop)
-1. Clone this repo locally: `git clone https://github.com/<yourname>/demonz-proto.git`
-2. Edit the `game/` assets or scripts as needed.
-3. Push to GitHub.
-4. GitHub Actions will run on push to `main` and create build artifacts.
+## How to Play
 
-## GitHub Secrets (for signed builds)
-To produce signed APK/AABs, add these repository secrets:
-- `RENPY_KEYSTORE_BASE64` — base64 of your release keystore (optional; blank builds unsigned).
-- `RENPY_KEYSTORE_PASSWORD`
-- `RENPY_KEY_ALIAS`
-- `RENPY_KEY_PASSWORD`
+### Android
+- Download the latest Android build (APK or AAB) from the [Releases](https://github.com/sdemonzdevelopment-spec/Prototype/releases) page.
+- Install on your device following standard APK/AAB installation steps.
+- Launch and enjoy!
 
-To create the base64 keystore value locally:
-```
-base64 -w 0 my-release-key.jks
-```
-Paste the output into the `RENPY_KEYSTORE_BASE64` secret.
+### Desktop (Windows/Mac/Linux)
+- Check for desktop builds in the [Releases](https://github.com/sdemonzdevelopment-spec/Prototype/releases) page.
+- Download and unzip the package.
+- Open the game’s executable file to start playing.
 
-## Notes
-- The workflow installs Ren'Py, Android SDK/NDK and attempts to build an Android package.
-- If you only want assets, remove the workflow.
-- For fast iteration on Android devices, edit files in the `game/` folder and push changes.
+## About the Project
 
-Enjoy — DemonZ Development
+- Powered by Ren'Py (classic VN engine).
+- Features original assets and story.
+- All build files are provided for the public—no setup required.
+
+## Feedback
+
+We’d love your thoughts! Share your feedback or suggestions via the repository’s Issues page.
+
+---
+
+© DemonZ Development
