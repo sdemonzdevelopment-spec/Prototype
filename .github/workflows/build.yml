@@ -158,23 +158,13 @@ jobs:
           ANDROID_SDK="${{ env.ANDROID_SDK_ROOT }}"
           ANDROID_NDK="${{ env.ANDROID_NDK_HOME }}"
           
-          if [ ! -f "$RENPY_ROOT/rapt/configure.py" ]; then
-            echo "::error::configure.py not found at $RENPY_ROOT/rapt/configure.py"
-            find "$RENPY_ROOT/rapt" -name "*.py" -type f | head -10
-            exit 1
-          fi
+          # RAPT 8.x uses environment variables instead of configure.py
+          echo "Setting up RAPT environment..."
           
-          echo "Configuring RAPT..."
-          cd "$RENPY_ROOT/rapt"
+          # Set Android SDK path for RAPT
+          echo "$ANDROID_SDK" > "$RENPY_ROOT/rapt/sdk.txt"
           
-          export PYTHONPATH="$RENPY_ROOT/rapt:${PYTHONPATH:-}"
-          
-          python3 configure.py \
-            --android-sdk "$ANDROID_SDK" \
-            --android-api ${{ env.ANDROID_API }} \
-            --android-ndk "$ANDROID_NDK" 2>&1 | tail -20 || {
-            echo "::warning::RAPT configuration completed with warnings (this is normal)"
-          }
+          echo "RAPT configuration complete"
         shell: bash
 
       - name: Verify game directory
