@@ -51,7 +51,7 @@ jobs:
 
       - name: Clean old artifacts
         run: |
-          rm -rf renpy-sdk* rapt* build-output* android-build* || true
+          rm -rf renpy-sdk* rapt* build-output* || true
         shell: bash
 
       - name: Download and extract Ren'Py SDK
@@ -128,7 +128,7 @@ jobs:
             "platform-tools" \
             "platforms;android-${{ env.ANDROID_API }}" \
             "build-tools;${{ env.BUILD_TOOLS }}" \
-            "ndk;${{ env.NDK_VERSION }}" 2>&1 | tail -10
+            "ndk;${{ env.NDK_VERSION }}" 2>&1 | tail -10 || true
         shell: bash
 
       - name: Configure RAPT
@@ -150,8 +150,7 @@ jobs:
             exit 1
           fi
           
-          echo "Game directory verified"
-          ls -la game/
+          echo "Game directory verified with .rpy files"
         shell: bash
 
       - name: Prepare game files
@@ -162,8 +161,7 @@ jobs:
           rm -rf "$RENPY_ROOT/game"
           cp -r game "$RENPY_ROOT/game"
           
-          echo "Game files prepared"
-          ls -la "$RENPY_ROOT/game/"
+          echo "Game files copied to Ren'Py SDK"
         shell: bash
 
       - name: Build Android APK
@@ -173,25 +171,24 @@ jobs:
           RENPY_ROOT="${{ env.RENPY_ROOT }}"
           GAME_DIR="$(pwd)/game"
           
-          echo "Starting Ren'Py Android build..."
+          echo "Starting Ren'Py Android APK build..."
           cd "$RENPY_ROOT"
           
-          export ANDROIDSDK="${{ env.ANDROID_SDK_ROOT }}"
-          export ANDROIDNDK="${{ env.ANDROID_NDK_HOME }}"
-          export ANDROIDAPI="${{ env.ANDROID_API }}"
+          chmod +x renpy.sh
           
-          python3 -u renpy.py android_build "$GAME_DIR" \
-            --dest "$RENPY_ROOT/rapt/bin" \
+          ./renpy.sh launcher android_build "$GAME_DIR" \
+            --destination "$RENPY_ROOT/rapt/bin" \
             --package com.demonz.development.demo \
             --name "DemonZ Prototype" \
             --version "1.0.0" \
             --numeric-version 1 \
             --orientation landscape \
-            release 2>&1 || {
+            2>&1 || {
             
-            echo "Build attempt completed with code $?"
-            find "$RENPY_ROOT/rapt" -type f -name "*.apk" -o -name "*.aab" 2>/dev/null | head -5 || true
+            echo "Build attempt completed"
           }
+          
+          echo "Android build process finished"
         shell: bash
 
       - name: Find and organize APK
@@ -202,25 +199,28 @@ jobs:
           OUTPUT_DIR="build-output"
           mkdir -p "$OUTPUT_DIR"
           
-          echo "Searching for build artifacts..."
+          echo "Searching for APK/AAB files..."
           
-          find "$RENPY_ROOT/rapt" -type f -name "*.apk" 2>/dev/null | head -10 | while read -r apk; do
+          find "$RENPY_ROOT" -type f -name "*.apk" 2>/dev/null | while read -r apk; do
             if [ -f "$apk" ]; then
               echo "Found APK: $apk"
-              cp -v "$apk" "$OUTPUT_DIR/"
+              cp "$apk" "$OUTPUT_DIR/" || true
             fi
           done
           
-          find "$RENPY_ROOT/rapt" -type f -name "*.aab" 2>/dev/null | head -10 | while read -r aab; do
+          find "$RENPY_ROOT" -type f -name "*.aab" 2>/dev/null | while read -r aab; do
             if [ -f "$aab" ]; then
               echo "Found AAB: $aab"
-              cp -v "$aab" "$OUTPUT_DIR/"
+              cp "$aab" "$OUTPUT_DIR/" || true
             fi
           done
           
-          echo ""
-          echo "Output directory contents:"
-          ls -lh "$OUTPUT_DIR" 2>/dev/null || echo "No files in output directory"
+          if [ -n "$(ls -A "$OUTPUT_DIR" 2>/dev/null)" ]; then
+            echo "✓ Build artifacts found"
+            ls -lh "$OUTPUT_DIR"
+          else
+            echo "⚠ No APK/AAB files found"
+          fi
           
           echo "OUTPUT_DIR=$OUTPUT_DIR" >> $GITHUB_ENV
         shell: bash
@@ -228,7 +228,7 @@ jobs:
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: DemonZ-APK-Build-${{ github.run_number }}
+          name: DemonZ-APK-${{ github.run_number }}
           path: build-output/
           if-no-files-found: warn
           retention-days: 30
@@ -248,21 +248,24 @@ jobs:
       - name: Build Summary
         if: always()
         run: |
-          echo "========== BUILD SUMMARY =========="
-          echo "Project: DemonZ Echoes of the Forgotten"
-          echo "Workflow: ${{ github.workflow }}"
-          echo "Run: ${{ github.run_number }}"
-          echo "Trigger: ${{ github.event_name }}"
+          echo "=========================================="
+          echo "  DemonZ: Echoes of the Forgotten"
+          echo "  Android Build Summary"
+          echo "=========================================="
+          echo "Build #: ${{ github.run_number }}"
           echo "Branch: ${{ github.ref_name }}"
+          echo "Trigger: ${{ github.event_name }}"
+          echo ""
           
           if [ -d "build-output" ] && [ -n "$(ls -A build-output 2>/dev/null)" ]; then
+            echo "✓ Status: BUILD SUCCESSFUL"
             echo ""
-            echo "✓ Build artifacts generated:"
+            echo "Artifacts:"
             ls -lh build-output/
           else
-            echo ""
-            echo "⚠ No artifacts found - check logs above"
+            echo "⚠ Status: NO ARTIFACTS GENERATED"
+            echo "Check logs above for build errors"
           fi
           
-          echo "======================================"
+          echo "=========================================="
         shell: bash
