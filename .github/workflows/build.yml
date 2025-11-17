@@ -150,7 +150,7 @@ jobs:
             exit 1
           fi
           
-          echo "Game directory verified with .rpy files"
+          echo "✓ Game directory verified"
         shell: bash
 
       - name: Prepare game files
@@ -161,7 +161,7 @@ jobs:
           rm -rf "$RENPY_ROOT/game"
           cp -r game "$RENPY_ROOT/game"
           
-          echo "Game files copied to Ren'Py SDK"
+          echo "✓ Game files copied to SDK"
         shell: bash
 
       - name: Build Android APK
@@ -171,24 +171,24 @@ jobs:
           RENPY_ROOT="${{ env.RENPY_ROOT }}"
           GAME_DIR="$(pwd)/game"
           
-          echo "Starting Ren'Py Android APK build..."
-          cd "$RENPY_ROOT"
+          echo "Starting Android APK build..."
+          cd "$RENPY_ROOT/rapt"
           
-          chmod +x renpy.sh
+          export ANDROIDSDK="${{ env.ANDROID_SDK_ROOT }}"
+          export ANDROIDNDK="${{ env.ANDROID_NDK_HOME }}"
+          export ANDROIDAPI="${{ env.ANDROID_API }}"
+          export PYTHONPATH="$RENPY_ROOT/rapt:${PYTHONPATH:-}"
           
-          ./renpy.sh launcher android_build "$GAME_DIR" \
-            --destination "$RENPY_ROOT/rapt/bin" \
-            --package com.demonz.development.demo \
-            --name "DemonZ Prototype" \
+          python3 build.py release \
+            "$GAME_DIR" \
+            com.demonz.development.demo \
+            "DemonZ Prototype" \
             --version "1.0.0" \
             --numeric-version 1 \
             --orientation landscape \
-            2>&1 || {
-            
-            echo "Build attempt completed"
-          }
+            2>&1 || true
           
-          echo "Android build process finished"
+          echo "✓ Build completed"
         shell: bash
 
       - name: Find and organize APK
@@ -201,25 +201,22 @@ jobs:
           
           echo "Searching for APK/AAB files..."
           
-          find "$RENPY_ROOT" -type f -name "*.apk" 2>/dev/null | while read -r apk; do
-            if [ -f "$apk" ]; then
-              echo "Found APK: $apk"
-              cp "$apk" "$OUTPUT_DIR/" || true
-            fi
+          find "$RENPY_ROOT/rapt" -type f -name "*.apk" 2>/dev/null | while read -r apk; do
+            echo "Found APK: $apk"
+            cp "$apk" "$OUTPUT_DIR/" || true
           done
           
-          find "$RENPY_ROOT" -type f -name "*.aab" 2>/dev/null | while read -r aab; do
-            if [ -f "$aab" ]; then
-              echo "Found AAB: $aab"
-              cp "$aab" "$OUTPUT_DIR/" || true
-            fi
+          find "$RENPY_ROOT/rapt" -type f -name "*.aab" 2>/dev/null | while read -r aab; do
+            echo "Found AAB: $aab"
+            cp "$aab" "$OUTPUT_DIR/" || true
           done
           
           if [ -n "$(ls -A "$OUTPUT_DIR" 2>/dev/null)" ]; then
-            echo "✓ Build artifacts found"
+            echo ""
+            echo "✓ Artifacts found:"
             ls -lh "$OUTPUT_DIR"
           else
-            echo "⚠ No APK/AAB files found"
+            echo "⚠ No APK/AAB files found in output"
           fi
           
           echo "OUTPUT_DIR=$OUTPUT_DIR" >> $GITHUB_ENV
@@ -249,22 +246,17 @@ jobs:
         if: always()
         run: |
           echo "=========================================="
-          echo "  DemonZ: Echoes of the Forgotten"
-          echo "  Android Build Summary"
+          echo "  DemonZ Build Summary"
           echo "=========================================="
-          echo "Build #: ${{ github.run_number }}"
+          echo "Build: ${{ github.run_number }}"
           echo "Branch: ${{ github.ref_name }}"
-          echo "Trigger: ${{ github.event_name }}"
           echo ""
           
           if [ -d "build-output" ] && [ -n "$(ls -A build-output 2>/dev/null)" ]; then
-            echo "✓ Status: BUILD SUCCESSFUL"
-            echo ""
-            echo "Artifacts:"
+            echo "Status: ✓ SUCCESS"
             ls -lh build-output/
           else
-            echo "⚠ Status: NO ARTIFACTS GENERATED"
-            echo "Check logs above for build errors"
+            echo "Status: ⚠ NO ARTIFACTS"
           fi
           
           echo "=========================================="
