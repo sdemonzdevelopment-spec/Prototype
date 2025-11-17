@@ -12,7 +12,7 @@ env:
   ANDROID_API: "30"
   BUILD_TOOLS: "30.0.3"
   NDK_VERSION: "21.3.6528147"
-  JAVA_VERSION: "11"
+  JAVA_VERSION: "17"
 
 jobs:
   build-android:
