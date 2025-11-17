@@ -40,12 +40,10 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get update
-sudo apt-get install -y libncurses6 libncurses-dev libz-dev xz-utils
-
-# Compatibility fix for older tools expecting libncurses.so.5
-sudo ln -s /lib/x86_64-linux-gnu/libncurses.so.6 /usr/lib/x86_64-linux-gnu/libncurses.so.5 || true
-
+          sudo apt-get install -y libncurses6 libncurses-dev libz-dev xz-utils
+          
+          # Compatibility fix for older tools expecting libncurses.so.5
+          sudo ln -s /lib/x86_64-linux-gnu/libncurses.so.6 /usr/lib/x86_64-linux-gnu/libncurses.so.5 || true
         shell: bash
 
       - name: Install Python dependencies
@@ -286,7 +284,7 @@ sudo ln -s /lib/x86_64-linux-gnu/libncurses.so.6 /usr/lib/x86_64-linux-gnu/libnc
               tail -50 "$RENPY_ROOT/rapt/build.log"
             fi
             echo "Searching all directories for build outputs..."
-            find "$RENPY_ROOT" -type f \( -name "*.apk" -o -name "*.aab" \) 2>/dev/null || true
+            find "$RENPY_ROOT" -type f ( -name "*.apk" -o -name "*.aab" ) 2>/dev/null || true
           fi
           
           # List all output files
@@ -304,34 +302,17 @@ sudo ln -s /lib/x86_64-linux-gnu/libncurses.so.6 /usr/lib/x86_64-linux-gnu/libnc
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Create Release (Optional)
+      - name: Create and Upload Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: build-${{ github.run_number }}
-          release_name: Build ${{ github.run_number }}
+          name: Build ${{ github.run_number }}
           draft: false
           prerelease: false
-
-      - name: Upload to Release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          OUTPUT_DIR="${{ env.OUTPUT_DIR }}"
-          RELEASE_TAG="build-${{ github.run_number }}"
-          
-          if [ -z "$OUTPUT_DIR" ] || [ ! -d "$OUTPUT_DIR" ]; then
-            echo "::warning::No build output directory found"
-            exit 0
-          fi
-          
-          for file in "$OUTPUT_DIR"/*; do
-            if [ -f "$file" ]; then
-              echo "Would upload: $(basename "$file")"
-            fi
-          done
-        shell: bash
+          files: build-output/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Summary
         if: always()
