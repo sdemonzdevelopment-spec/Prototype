@@ -247,36 +247,35 @@ jobs:
           
           echo "Searching for build artifacts..."
           
-          # Search for APK files
+          # Search for APK files - simplified approach
           APK_FOUND=false
-          while IFS= read -r apk_file; do
+          
+          find "$RENPY_ROOT/rapt" -type f -name "*.apk" 2>/dev/null | while read -r apk_file; do
             if [ -f "$apk_file" ]; then
               echo "Found APK: $apk_file"
               cp "$apk_file" "$OUTPUT_DIR/"
               APK_FOUND=true
             fi
-          done < <(find "$RENPY_ROOT/rapt" -type f -name "*.apk" 2>/dev/null || true)
+          done
           
           # Also search for AAB files
-          while IFS= read -r aab_file; do
+          find "$RENPY_ROOT/rapt" -type f -name "*.aab" 2>/dev/null | while read -r aab_file; do
             if [ -f "$aab_file" ]; then
               echo "Found AAB: $aab_file"
               cp "$aab_file" "$OUTPUT_DIR/"
             fi
-          done < <(find "$RENPY_ROOT/rapt" -type f -name "*.aab" 2>/dev/null || true)
+          done
           
-          if [ "$APK_FOUND" = false ]; then
-            echo "::warning::No APK files found. Checking build logs..."
-            if [ -f "$RENPY_ROOT/rapt/build.log" ]; then
-              tail -50 "$RENPY_ROOT/rapt/build.log"
-            fi
-            echo "Searching all directories for build outputs..."
-            find "$RENPY_ROOT" -type f ( -name "*.apk" -o -name "*.aab" ) 2>/dev/null || true
+          # Check if any files were found
+          if [ -z "$(ls -A "$OUTPUT_DIR" 2>/dev/null)" ]; then
+            echo "::warning::No APK/AAB files found. Searching entire SDK..."
+            find "$RENPY_ROOT" -type f -name "*.apk" 2>/dev/null | head -10 || true
+            find "$RENPY_ROOT" -type f -name "*.aab" 2>/dev/null | head -10 || true
           fi
           
           # List all output files
           echo "Build output directory contents:"
-          ls -lh "$OUTPUT_DIR" || echo "Output directory is empty"
+          ls -lh "$OUTPUT_DIR" 2>/dev/null || echo "Output directory is empty"
           
           echo "OUTPUT_DIR=$OUTPUT_DIR" >> $GITHUB_ENV
         shell: bash
