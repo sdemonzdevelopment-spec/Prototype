@@ -40,7 +40,12 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libncurses5 libncurses5-dev libz-dev xz-utils
+          sudo apt-get update
+sudo apt-get install -y libncurses6 libncurses-dev libz-dev xz-utils
+
+# Compatibility fix for older tools expecting libncurses.so.5
+sudo ln -s /lib/x86_64-linux-gnu/libncurses.so.6 /usr/lib/x86_64-linux-gnu/libncurses.so.5 || true
+
         shell: bash
 
       - name: Install Python dependencies
