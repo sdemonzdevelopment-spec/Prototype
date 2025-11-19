@@ -84,25 +84,19 @@ jobs:
           wget -q --show-progress -O rapt.zip "$RAPT_URL"
           unzip -q rapt.zip
           
-          # FIX: Find the exact directory containing build.py
-          # This handles cases where the zip extracts to nested folders
-          RAPT_SOURCE=$(find . -type f -name "build.py" | head -1 | xargs dirname)
+          if [ -d "rapt" ]; then
+            RAPT_DIR="rapt"
+          else
+            RAPT_DIR=$(find . -maxdepth 1 -type d -name "rapt*" | head -1)
+          fi
           
-          if [ -z "$RAPT_SOURCE" ]; then
-            echo "::error::RAPT build.py not found in extracted files"
-            find . -maxdepth 3 # Debug output to see what was extracted
+          if [ -z "$RAPT_DIR" ]; then
+            echo "::error::RAPT not found"
             exit 1
           fi
           
-          echo "Found RAPT source at: $RAPT_SOURCE"
-          
-          # Ensure destination is clean
           rm -rf renpy-sdk/rapt
-          
-          # Move the found directory to the expected location
-          mv "$RAPT_SOURCE" renpy-sdk/rapt
-          
-          echo "RAPT installed to renpy-sdk/rapt"
+          mv "$RAPT_DIR" renpy-sdk/rapt
         shell: bash
 
       - name: Setup Android SDK
@@ -179,9 +173,6 @@ jobs:
           
           echo "Starting Android APK build..."
           cd "$RENPY_ROOT/rapt"
-          
-          # Debug: Verify build.py exists before running
-          ls -la build.py || (echo "::error::build.py missing in $(pwd)" && ls -la && exit 1)
           
           export ANDROIDSDK="${{ env.ANDROID_SDK_ROOT }}"
           export ANDROIDNDK="${{ env.ANDROID_NDK_HOME }}"
