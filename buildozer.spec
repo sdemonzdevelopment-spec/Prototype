@@ -10,8 +10,9 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ogg
 
 # 3. REQUIREMENTS
-# Added hostpython3, which is often required for GitHub Actions builds
-requirements = python3,kivy==2.3.0,pillow,hostpython3
+# We use pyjnius 1.6.1 for Python 3 compatibility
+# We include hostpython3 which is often needed for the build process
+requirements = python3,kivy==2.3.0,pillow,pyjnius==1.6.1,hostpython3
 
 # 4. ANDROID SPECIFIC
 version = 0.1
@@ -21,13 +22,15 @@ fullscreen = 1
 # API Settings (Standard for 2025)
 android.api = 34
 android.minapi = 21
-# It is usually safer to let Buildozer download the NDK it needs automatically.
-# android.ndk = 25b 
 android.accept_sdk_license = True
 
 # ARCHITECTURES
-# Adding armeabi-v7a ensures it works on older cheap phones too, not just new ones.
+# Supports both modern and older devices
 android.archs = arm64-v8a, armeabi-v7a
+
+# CRITICAL SETTINGS FOR PYTHON 3 & KIVY 2.3.0
+# We use the develop branch to get the latest fixes for Android 14 (API 34)
+p4a.branch = develop
 
 # 5. BUILD SETTINGS
 android.private_storage = True
