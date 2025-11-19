@@ -35,22 +35,11 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libncurses6 libncurses-dev libz-dev xz-utils
           sudo ln -s /lib/x86_64-linux-gnu/libncurses.so.6 /usr/lib/x86_64-linux-gnu/libncurses.so.5 || true
-        shell: bash
-
-      - name: Install Python dependencies
-        # FIX: Added 'future', 'six', 'pefile', 'rsa', 'requests' which are required by RAPT/Ren'Py
-        run: |
-          python3 -m pip install --upgrade pip setuptools wheel pyyaml future six pefile rsa requests
         shell: bash
 
       - name: Clean old artifacts
@@ -172,17 +161,26 @@ jobs:
           echo "Starting Android APK build..."
           cd "$RENPY_ROOT/rapt"
           
-          # Debug: Ensure file exists
-          ls -la build.py
+          # CRITICAL FIX: Use Ren'Py's bundled Python
+          # This Python has pygame_sdl2 and future installed
+          RENPY_PY=$(find "$RENPY_ROOT/lib" -name "python" -type f -executable | grep "linux-x86_64" | head -1)
+          
+          if [ -z "$RENPY_PY" ]; then
+             echo "::error::Could not find bundled Python in Ren'Py SDK"
+             exit 1
+          fi
+          
+          echo "Using bundled Python: $RENPY_PY"
+          
+          # Set LD_LIBRARY_PATH so it can find libpython and pygame_sdl2 shared libs
+          export LD_LIBRARY_PATH="$(dirname "$RENPY_PY")"
           
           export ANDROIDSDK="${{ env.ANDROID_SDK_ROOT }}"
           export ANDROIDNDK="${{ env.ANDROID_NDK_HOME }}"
           export ANDROIDAPI="${{ env.ANDROID_API }}"
-          
-          # Add RENPY_ROOT to PYTHONPATH
           export PYTHONPATH="$RENPY_ROOT:$RENPY_ROOT/rapt:${PYTHONPATH:-}"
           
-          python3 build.py release \
+          "$RENPY_PY" build.py release \
             "$GAME_DIR" \
             com.demonz.development.demo \
             "DemonZ Prototype" \
