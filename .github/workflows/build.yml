@@ -7,7 +7,6 @@ on:
     branches: [ main, master, develop ]
   workflow_dispatch:
 
-# FIX 1: Grant permission to upload releases (Solves the 403 error)
 permissions:
   contents: write
 
@@ -125,44 +124,65 @@ jobs:
           cp -r game "$RENPY_ROOT/game"
         shell: bash
 
+      - name: Debug SDK Structure
+        run: |
+          # PROOF: Verify renpy folder exists where we think it is
+          ls -F "${{ env.RENPY_ROOT }}"
+          echo "Checking for renpy module..."
+          if [ -d "${{ env.RENPY_ROOT }}/renpy" ]; then
+            echo "✓ renpy folder found."
+          else
+            echo "::error:: renpy folder MISSING in ${{ env.RENPY_ROOT }}"
+            exit 1
+          fi
+        shell: bash
+
       - name: Build Android APK
         run: |
           set -euo pipefail
           
-          # 1. DEFINE PATHS
+          # PATHS
           RENPY_ROOT="${{ env.RENPY_ROOT }}"
           GAME_DIR="$(pwd)/game"
-          RAPT_DIR="$RENPY_ROOT/rapt"
           
-          echo "Finding bundled Python..."
-          # Find the python executable inside the SDK (linux-x86_64)
+          # 1. FIND BUNDLED PYTHON
           RENPY_PY=$(find "$RENPY_ROOT/lib" -name "python" -type f -executable | grep "linux-x86_64" | head -1)
-          
-          if [ -z "$RENPY_PY" ]; then
-             echo "::error::Could not find bundled Python in Ren'Py SDK"
-             exit 1
-          fi
-          echo "Using bundled Python at: $RENPY_PY"
+          echo "Using bundled Python: $RENPY_PY"
 
-          # 2. ENVIRONMENT SETUP (Crucial for 'import renpy')
-          # PYTHONPATH must be the SDK Root so python can find the 'renpy' folder
-          export PYTHONPATH="$RENPY_ROOT"
-          
-          # LD_LIBRARY_PATH allows python to find its own compiled libraries
+          # 2. SET LIBRARY PATH (For pygame_sdl2 shared libs)
           export LD_LIBRARY_PATH="$(dirname "$RENPY_PY")"
+
+          # 3. RUN BUILD WITH FORCED PATH
+          # We use 'runpy' to execute build.py while manually injecting the SDK root into sys.path
+          # This bypasses any issues with PYTHONPATH being ignored by the binary.
           
-          echo "PYTHONPATH is set to: $PYTHONPATH"
+          cd "$RENPY_ROOT"
           
-          # 3. EXECUTE BUILD
-          cd "$RAPT_DIR"
-          
-          "$RENPY_PY" build.py release \
-            "$GAME_DIR" \
-            com.demonz.development.demo \
-            "DemonZ Prototype" \
-            --version "1.0.0" \
-            --numeric-version 1 \
-            --orientation landscape
+          "$RENPY_PY" -c "
+import sys
+import os
+import runpy
+
+# FORCE the SDK root into the python path
+sdk_root = os.getcwd()
+print(f'Injecting SDK root into sys.path: {sdk_root}')
+sys.path.insert(0, sdk_root)
+
+# Set up arguments for build.py
+sys.argv = [
+    'build.py', 
+    'release', 
+    '$GAME_DIR', 
+    'com.demonz.development.demo', 
+    'DemonZ Prototype', 
+    '--version', '1.0.0', 
+    '--numeric-version', '1', 
+    '--orientation', 'landscape'
+]
+
+print('Running rapt/build.py...')
+runpy.run_path('rapt/build.py', run_name='__main__')
+"
           
           echo "✓ Build completed"
         shell: bash
