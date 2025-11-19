@@ -1,33 +1,41 @@
-[app]
+name: Build Android APK
 
-# 1. BASIC INFO
-title = DemonZ
-package.name = demonzgame
-package.domain = org.demonz
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
-# 2. FILES
-source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,ogg
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-# 3. REQUIREMENTS (Added pillow for images)
-requirements = python3,kivy==2.3.0,pillow
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-# 4. ANDROID SPECIFIC
-version = 0.1
-orientation = landscape
-fullscreen = 1
+      # Frees up disk space so the build doesn't crash
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
 
-# API Settings (Standard for 2025)
-android.api = 34
-android.minapi = 21
-android.ndk = 25b
-android.accept_sdk_license = True
-android.archs = arm64-v8a
+      - name: Build with Buildozer
+        uses: ArtemSBulgakov/buildozer-action-v1@v1
+        id: buildozer
+        with:
+          command: buildozer android debug
+          buildozer_version: master
+          # specific versions can help stability
+          python_version: '3.11' 
 
-# 5. BUILD SETTINGS
-# Use private storage so the app doesn't need strict permissions
-android.private_storage = True
-
-[buildozer]
-log_level = 2
-warn_on_root = 1
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: bin/*.apk
