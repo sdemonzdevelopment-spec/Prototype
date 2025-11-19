@@ -14,7 +14,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Frees up disk space to prevent build crashes
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
         with:
@@ -26,13 +25,12 @@ jobs:
           swap-storage: true
 
       - name: Build with Buildozer
-        # FIXED: Removed "-v1" from the repository name below
         uses: ArtemSBulgakov/buildozer-action@v1
         id: buildozer
         with:
           command: buildozer android debug
-          buildozer_version: master
-          python_version: '3.11' 
+          buildozer_version: stable
+          # removed the invalid 'python_version' line
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
