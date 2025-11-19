@@ -38,8 +38,7 @@ jobs:
         with:
           python-version: '3.10'
 
-      # 4. Cache Buildozer Global Directory (The Permanent Fix)
-      # This saves the downloaded libraries (like freetype) so you don't need the internet next time.
+      # 4. Cache Buildozer (Prevents 502 Network Errors)
       - name: Cache Buildozer
         uses: actions/cache@v3
         with:
@@ -48,7 +47,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildozer-
 
-      # 5. Install Dependencies
+      # 5. Install Dependencies (The "Nuclear" Fix for Ubuntu 24.04)
       - name: Install Dependencies
         run: |
           sudo apt-get update
