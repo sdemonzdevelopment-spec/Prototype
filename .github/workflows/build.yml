@@ -7,6 +7,10 @@ on:
     branches: [ main, master, develop ]
   workflow_dispatch:
 
+# FIX 1: Grant permissions to create releases
+permissions:
+  contents: write
+
 env:
   RENPY_VERSION: "8.1.3"
   ANDROID_API: "30"
@@ -84,24 +88,18 @@ jobs:
           wget -q --show-progress -O rapt.zip "$RAPT_URL"
           unzip -q rapt.zip
           
-          # FIX: Find the exact directory containing build.py
-          # This handles cases where the zip extracts to nested folders
+          # Find the exact directory containing build.py
           RAPT_SOURCE=$(find . -type f -name "build.py" | head -1 | xargs dirname)
           
           if [ -z "$RAPT_SOURCE" ]; then
             echo "::error::RAPT build.py not found in extracted files"
-            find . -maxdepth 3 # Debug output to see what was extracted
+            find . -maxdepth 3
             exit 1
           fi
           
           echo "Found RAPT source at: $RAPT_SOURCE"
-          
-          # Ensure destination is clean
           rm -rf renpy-sdk/rapt
-          
-          # Move the found directory to the expected location
           mv "$RAPT_SOURCE" renpy-sdk/rapt
-          
           echo "RAPT installed to renpy-sdk/rapt"
         shell: bash
 
@@ -115,8 +113,6 @@ jobs:
           
           echo "Downloading Android command-line tools..."
           wget -q --show-progress -O cmdline-tools.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
-          
-          echo "Extracting Android tools..."
           unzip -q cmdline-tools.zip
           mv cmdline-tools latest
           
@@ -127,7 +123,6 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${{ env.NDK_VERSION }}" >> $GITHUB_ENV
           echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
           
-          echo "Installing Android SDK components..."
           yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --licenses 2>/dev/null || true
           
           "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" \
@@ -155,7 +150,6 @@ jobs:
             echo "::error::No .rpy files found in game/"
             exit 1
           fi
-          
           echo "✓ Game directory verified"
         shell: bash
 
@@ -163,10 +157,8 @@ jobs:
         run: |
           set -euo pipefail
           RENPY_ROOT="${{ env.RENPY_ROOT }}"
-          
           rm -rf "$RENPY_ROOT/game"
           cp -r game "$RENPY_ROOT/game"
-          
           echo "✓ Game files copied to SDK"
         shell: bash
 
@@ -180,22 +172,24 @@ jobs:
           echo "Starting Android APK build..."
           cd "$RENPY_ROOT/rapt"
           
-          # Debug: Verify build.py exists before running
-          ls -la build.py || (echo "::error::build.py missing in $(pwd)" && ls -la && exit 1)
+          # Debug: Ensure file exists
+          ls -la build.py
           
           export ANDROIDSDK="${{ env.ANDROID_SDK_ROOT }}"
           export ANDROIDNDK="${{ env.ANDROID_NDK_HOME }}"
           export ANDROIDAPI="${{ env.ANDROID_API }}"
-          export PYTHONPATH="$RENPY_ROOT/rapt:${PYTHONPATH:-}"
           
+          # FIX 2: Add RENPY_ROOT to PYTHONPATH so it can find 'renpy' module
+          export PYTHONPATH="$RENPY_ROOT:$RENPY_ROOT/rapt:${PYTHONPATH:-}"
+          
+          # Removed '|| true' so we can see if it actually fails
           python3 build.py release \
             "$GAME_DIR" \
             com.demonz.development.demo \
             "DemonZ Prototype" \
             --version "1.0.0" \
             --numeric-version 1 \
-            --orientation landscape \
-            2>&1 || true
+            --orientation landscape
           
           echo "✓ Build completed"
         shell: bash
@@ -225,7 +219,8 @@ jobs:
             echo "✓ Artifacts found:"
             ls -lh "$OUTPUT_DIR"
           else
-            echo "⚠ No APK/AAB files found in output"
+            echo "::error::No APK/AAB files found in output"
+            exit 1
           fi
           
           echo "OUTPUT_DIR=$OUTPUT_DIR" >> $GITHUB_ENV
@@ -250,23 +245,3 @@ jobs:
           files: build-output/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Summary
-        if: always()
-        run: |
-          echo "=========================================="
-          echo "  DemonZ Build Summary"
-          echo "=========================================="
-          echo "Build: ${{ github.run_number }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo ""
-          
-          if [ -d "build-output" ] && [ -n "$(ls -A build-output 2>/dev/null)" ]; then
-            echo "Status: ✓ SUCCESS"
-            ls -lh build-output/
-          else
-            echo "Status: ⚠ NO ARTIFACTS"
-          fi
-          
-          echo "=========================================="
-        shell: bash
