@@ -28,10 +28,11 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          # FIXED: Replaced libtinfo5 with libtinfo6 for Ubuntu 24.04
+          # FIXED: Added automake, libtool-bin, and gettext to fix LT_SYS_SYMBOL_USCORE error
           sudo apt-get install -y \
-            zip unzip autoconf libtool pkg-config zlib1g-dev \
-            libncurses-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev
+            zip unzip autoconf libtool libtool-bin pkg-config zlib1g-dev \
+            libncurses-dev libncursesw5-dev libtinfo6 cmake libffi-dev \
+            libssl-dev automake gettext
           pip install --upgrade pip
           pip install --upgrade buildozer cython
 
