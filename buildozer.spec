@@ -1,59 +1,37 @@
 [app]
 
-# (str) Title of your application
+# 1. BASIC INFO
 title = DemonZ
-
-# (str) Package name
 package.name = demonzgame
-
-# (str) Package domain (needed for android/ios packaging)
 package.domain = org.demonz
 
-# (str) Source code where the main.py live
+# 2. FILES
 source.dir = .
-
-# (list) Source files to include (let empty to include all the files)
-# IMPORTANT: We added png and ogg here so it includes your assets!
 source.include_exts = py,png,jpg,kv,atlas,ogg
 
-# (list) Application requirements
-# Comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy
+# 3. REQUIREMENTS
+# Added hostpython3, which is often required for GitHub Actions builds
+requirements = python3,kivy==2.3.0,pillow,hostpython3
 
-# (str) Presplash of the application
-# presplash.filename = %(source.dir)s/data/presplash.png
-
-# (str) Icon of the application
-# icon.filename = %(source.dir)s/data/icon.png
-
-# (list) Supported orientations
+# 4. ANDROID SPECIFIC
+version = 0.1
 orientation = landscape
-
-# (bool) Indicate if the application should be fullscreen or not
 fullscreen = 1
 
-# (int) Target Android API, should be as high as possible.
-android.api = 33
-
-# (int) Minimum API your APK will support.
+# API Settings (Standard for 2025)
+android.api = 34
 android.minapi = 21
+# It is usually safer to let Buildozer download the NDK it needs automatically.
+# android.ndk = 25b 
+android.accept_sdk_license = True
 
-# (str) Android NDK version to use
-android.ndk = 25b
+# ARCHITECTURES
+# Adding armeabi-v7a ensures it works on older cheap phones too, not just new ones.
+android.archs = arm64-v8a, armeabi-v7a
 
-# (bool) Use --private data storage (True) or --dir public storage (False)
+# 5. BUILD SETTINGS
 android.private_storage = True
 
-# (str) The format used to package the app for release mode (aab or apk or aar).
-android.release_artifact = apk
-
-# (str) The format used to package the app for debug mode (apk or aar).
-android.debug_artifact = apk
-
 [buildozer]
-
-# (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
 log_level = 2
-
-# (int) Display warning if buildozer is run as root (0 = False, 1 = True)
 warn_on_root = 1
