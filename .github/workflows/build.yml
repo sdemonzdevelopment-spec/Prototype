@@ -7,6 +7,7 @@ on:
     branches: [ main, master, develop ]
   workflow_dispatch:
 
+# FIX 1: Grant permission to upload releases (Solves the 403 error)
 permissions:
   contents: write
 
@@ -58,11 +59,6 @@ jobs:
           tar xf renpy-sdk.tar.bz2
           
           RENPY_DIR=$(ls -d renpy-* 2>/dev/null | head -1)
-          if [ -z "$RENPY_DIR" ]; then
-            echo "::error::Ren'Py SDK extraction failed"
-            exit 1
-          fi
-          
           mv "$RENPY_DIR" renpy-sdk
           echo "RENPY_ROOT=$(pwd)/renpy-sdk" >> $GITHUB_ENV
         shell: bash
@@ -77,19 +73,12 @@ jobs:
           wget -q --show-progress -O rapt.zip "$RAPT_URL"
           unzip -q rapt.zip
           
-          # Find the exact directory containing build.py
+          # Robustly find where build.py is hidden and move it to the right place
           RAPT_SOURCE=$(find . -type f -name "build.py" | head -1 | xargs dirname)
-          
-          if [ -z "$RAPT_SOURCE" ]; then
-            echo "::error::RAPT build.py not found in extracted files"
-            find . -maxdepth 3
-            exit 1
-          fi
-          
           echo "Found RAPT source at: $RAPT_SOURCE"
+          
           rm -rf renpy-sdk/rapt
           mv "$RAPT_SOURCE" renpy-sdk/rapt
-          echo "RAPT installed to renpy-sdk/rapt"
         shell: bash
 
       - name: Setup Android SDK
@@ -128,57 +117,44 @@ jobs:
           echo "${{ env.ANDROID_SDK_ROOT }}" > "$RENPY_ROOT/rapt/sdk.txt"
         shell: bash
 
-      - name: Verify game directory
-        run: |
-          if [ ! -d "game" ]; then
-            echo "::error::game/ directory not found"
-            exit 1
-          fi
-          
-          if ! find game -name "*.rpy" -type f | grep -q .; then
-            echo "::error::No .rpy files found in game/"
-            exit 1
-          fi
-          echo "✓ Game directory verified"
-        shell: bash
-
       - name: Prepare game files
         run: |
           set -euo pipefail
           RENPY_ROOT="${{ env.RENPY_ROOT }}"
           rm -rf "$RENPY_ROOT/game"
           cp -r game "$RENPY_ROOT/game"
-          echo "✓ Game files copied to SDK"
         shell: bash
 
       - name: Build Android APK
         run: |
           set -euo pipefail
           
+          # 1. DEFINE PATHS
           RENPY_ROOT="${{ env.RENPY_ROOT }}"
           GAME_DIR="$(pwd)/game"
+          RAPT_DIR="$RENPY_ROOT/rapt"
           
-          echo "Starting Android APK build..."
-          cd "$RENPY_ROOT/rapt"
-          
-          # CRITICAL FIX: Use Ren'Py's bundled Python
-          # This Python has pygame_sdl2 and future installed
+          echo "Finding bundled Python..."
+          # Find the python executable inside the SDK (linux-x86_64)
           RENPY_PY=$(find "$RENPY_ROOT/lib" -name "python" -type f -executable | grep "linux-x86_64" | head -1)
           
           if [ -z "$RENPY_PY" ]; then
              echo "::error::Could not find bundled Python in Ren'Py SDK"
              exit 1
           fi
+          echo "Using bundled Python at: $RENPY_PY"
+
+          # 2. ENVIRONMENT SETUP (Crucial for 'import renpy')
+          # PYTHONPATH must be the SDK Root so python can find the 'renpy' folder
+          export PYTHONPATH="$RENPY_ROOT"
           
-          echo "Using bundled Python: $RENPY_PY"
-          
-          # Set LD_LIBRARY_PATH so it can find libpython and pygame_sdl2 shared libs
+          # LD_LIBRARY_PATH allows python to find its own compiled libraries
           export LD_LIBRARY_PATH="$(dirname "$RENPY_PY")"
           
-          export ANDROIDSDK="${{ env.ANDROID_SDK_ROOT }}"
-          export ANDROIDNDK="${{ env.ANDROID_NDK_HOME }}"
-          export ANDROIDAPI="${{ env.ANDROID_API }}"
-          export PYTHONPATH="$RENPY_ROOT:$RENPY_ROOT/rapt:${PYTHONPATH:-}"
+          echo "PYTHONPATH is set to: $PYTHONPATH"
+          
+          # 3. EXECUTE BUILD
+          cd "$RAPT_DIR"
           
           "$RENPY_PY" build.py release \
             "$GAME_DIR" \
@@ -194,26 +170,14 @@ jobs:
       - name: Find and organize APK
         run: |
           set -euo pipefail
-          
           RENPY_ROOT="${{ env.RENPY_ROOT }}"
           OUTPUT_DIR="build-output"
           mkdir -p "$OUTPUT_DIR"
           
-          echo "Searching for APK/AAB files..."
-          
-          find "$RENPY_ROOT/rapt" -type f -name "*.apk" 2>/dev/null | while read -r apk; do
-            echo "Found APK: $apk"
-            cp "$apk" "$OUTPUT_DIR/" || true
-          done
-          
-          find "$RENPY_ROOT/rapt" -type f -name "*.aab" 2>/dev/null | while read -r aab; do
-            echo "Found AAB: $aab"
-            cp "$aab" "$OUTPUT_DIR/" || true
-          done
+          find "$RENPY_ROOT/rapt" -type f -name "*.apk" -exec cp {} "$OUTPUT_DIR/" \;
+          find "$RENPY_ROOT/rapt" -type f -name "*.aab" -exec cp {} "$OUTPUT_DIR/" \;
           
           if [ -n "$(ls -A "$OUTPUT_DIR" 2>/dev/null)" ]; then
-            echo ""
-            echo "✓ Artifacts found:"
             ls -lh "$OUTPUT_DIR"
           else
             echo "::error::No APK/AAB files found in output"
