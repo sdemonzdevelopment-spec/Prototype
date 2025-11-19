@@ -14,7 +14,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. Free Disk Space (Essential for Android builds to prevent storage crashes)
+      # 1. Free Disk Space (Prevents "No space left on device" errors)
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
         with:
@@ -32,16 +32,14 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # 3. Setup Python 3.10 (Most stable for Kivy/Buildozer)
+      # 3. Setup Python 3.10 (Stable choice for Buildozer)
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # 4. Install Dependencies (The "Nuclear" Fix)
-      # Added 'libltdl-dev' (Fixes AC_PROG_LIBTOOL error)
-      # Added 'autopoint' (Fixes autoreconf error)
-      # Added 'automake' & 'libtool-bin' (Fixes compilation macros)
+      # 4. Install Dependencies (The Complete Fix for Ubuntu 24.04)
+      # Includes libltdl-dev, automake, autopoint, and libtool-bin
       - name: Install Dependencies
         run: |
           sudo apt-get update
@@ -50,6 +48,7 @@ jobs:
             zlib1g-dev libncurses-dev libncursesw5-dev libtinfo6 cmake libffi-dev \
             libssl-dev automake gettext autopoint libltdl-dev
           pip install --upgrade pip
+          # Installs latest Buildozer and Cython (Kivy 2.3.0 requires Cython 3.x)
           pip install --upgrade buildozer cython
 
       # 5. Build the APK
