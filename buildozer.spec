@@ -10,8 +10,8 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ogg
 
 # 3. REQUIREMENTS
-# We keep requirements standard. python3 implies the correct version for the p4a release.
-requirements = python3,kivy==2.3.0,pillow,pyjnius==1.6.1
+# Using newer, working versions - no version pins for auto-compatibility
+requirements = python3,kivy,pillow,pyjnius
 
 # 4. ANDROID SPECIFIC
 version = 0.1
@@ -26,9 +26,9 @@ android.accept_sdk_license = True
 # ARCHITECTURES
 android.archs = arm64-v8a, armeabi-v7a
 
-# CRITICAL FIX: Use a specific STABLE TAG instead of 'master' or 'develop'
-# This version (Jan 2024) is stable and avoids the recent bugs.
-p4a.branch = v2024.01.21
+# CRITICAL FIX: Use the latest stable release
+# Using develop branch for latest bug fixes and Python 3 compatibility
+p4a.branch = develop
 
 # 5. BUILD SETTINGS
 android.private_storage = True
