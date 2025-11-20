@@ -10,8 +10,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ogg
 
 # 3. REQUIREMENTS
-# Using 'python3' lets Buildozer pick the correct stable version (likely 3.11.9)
-# We keep hostpython3 as it is required for the build process
+# We keep requirements standard. python3 implies the correct version for the p4a release.
 requirements = python3,kivy==2.3.0,pillow,pyjnius==1.6.1,hostpython3
 
 # 4. ANDROID SPECIFIC
@@ -19,7 +18,7 @@ version = 0.1
 orientation = landscape
 fullscreen = 1
 
-# API Settings
+# API Settings (API 34 is supported by this release)
 android.api = 34
 android.minapi = 21
 android.accept_sdk_license = True
@@ -27,8 +26,9 @@ android.accept_sdk_license = True
 # ARCHITECTURES
 android.archs = arm64-v8a, armeabi-v7a
 
-# CRITICAL FIX: Use 'master' branch to avoid broken remote debugging code
-p4a.branch = master
+# CRITICAL FIX: Use a specific STABLE TAG instead of 'master' or 'develop'
+# This version (Jan 2024) is stable and avoids the recent bugs.
+p4a.branch = v2024.01.21
 
 # 5. BUILD SETTINGS
 android.private_storage = True
