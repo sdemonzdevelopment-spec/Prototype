@@ -9,29 +9,34 @@ package.domain = org.demonz
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ogg
 
-# 3. REQUIREMENTS
-# Using newer, working versions - no version pins for auto-compatibility
-requirements = python3,kivy,pillow,pyjnius
+# 3. REQUIREMENTS - PRODUCTION READY WITH VERSION PINNING
+# Pin Kivy version for stability and compatibility
+requirements = python3==3.10,kivy==2.2.1,pillow==10.0.0,pyjnius
 
 # 4. ANDROID SPECIFIC
-version = 0.1
+version = 1.0.0
 orientation = landscape
 fullscreen = 1
 
-# API Settings (API 34 is supported by this release)
-android.api = 34
+# API Settings - Use stable API 33 instead of 34
+android.api = 33
 android.minapi = 21
+android.ndk = 25b
 android.accept_sdk_license = True
 
-# ARCHITECTURES
-android.archs = arm64-v8a, armeabi-v7a
+# ARCHITECTURES - Single arch for faster testing
+# Change to: arm64-v8a,armeabi-v7a for production release
+android.archs = arm64-v8a
 
-# CRITICAL FIX: Use the latest stable release
-# Removed p4a.branch to use default stable version instead of unstable develop branch
-# p4a.branch = develop  # REMOVED - causes build failures
+# PERMISSIONS
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 
 # 5. BUILD SETTINGS
 android.private_storage = True
+
+# Add app metadata
+android.entrypoint = org.kivy.android.PythonActivity
+android.apptheme = @android:style/Theme.NoTitleBar
 
 [buildozer]
 log_level = 2
