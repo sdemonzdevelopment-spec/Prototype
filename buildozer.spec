@@ -27,8 +27,8 @@ android.accept_sdk_license = True
 android.archs = arm64-v8a, armeabi-v7a
 
 # CRITICAL FIX: Use the latest stable release
-# Using develop branch for latest bug fixes and Python 3 compatibility
-p4a.branch = develop
+# Removed p4a.branch to use default stable version instead of unstable develop branch
+# p4a.branch = develop  # REMOVED - causes build failures
 
 # 5. BUILD SETTINGS
 android.private_storage = True
