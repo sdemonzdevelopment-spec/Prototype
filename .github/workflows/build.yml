@@ -38,12 +38,12 @@ jobs:
         with:
           python-version: '3.10'
 
-      # 4. Cache Buildozer (UPDATED KEY TO 'v2' TO FORCE CLEAN BUILD)
+      # 4. Cache Buildozer
       - name: Cache Buildozer
         uses: actions/cache@v3
         with:
           path: .buildozer
-          # CHANGED: Added 'v2' to the key to ignore the old broken cache
+          # Keep 'v2' key; since the last run failed, it's still clean.
           key: ${{ runner.os }}-buildozer-v2-${{ github.run_id }}
           restore-keys: |
             ${{ runner.os }}-buildozer-v2-
@@ -59,9 +59,12 @@ jobs:
           pip install --upgrade pip
           pip install --upgrade buildozer cython
 
-      # 6. Build the APK
+      # 6. Build the APK (With 'File exists' Safety Fix)
       - name: Build with Buildozer
-        run: buildozer android debug
+        run: |
+          # Force removal of the dists folder to prevent [Errno 17] File exists
+          rm -rf .buildozer/android/platform/build-*/dists
+          buildozer android debug
 
       # 7. Upload Artifacts
       - name: Upload Artifacts
