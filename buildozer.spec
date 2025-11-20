@@ -11,7 +11,7 @@ source.include_exts = py,png,jpg,kv,atlas,ogg
 
 # 3. REQUIREMENTS
 # We keep requirements standard. python3 implies the correct version for the p4a release.
-requirements = python3,kivy==2.3.0,pillow,pyjnius==1.6.1,hostpython3
+requirements = python3,kivy==2.3.0,pillow,pyjnius==1.6.1
 
 # 4. ANDROID SPECIFIC
 version = 0.1
