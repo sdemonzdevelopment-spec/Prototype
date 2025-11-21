@@ -9,23 +9,21 @@ package.domain = org.demonz
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ogg
 
-# 3. REQUIREMENTS - PRODUCTION READY WITH VERSION PINNING
-# Pin Kivy version for stability and compatibility
-requirements = python3==3.10,kivy==2.2.1,pillow==10.0.0,pyjnius
+# 3. REQUIREMENTS - SIMPLIFIED (no version pinning to avoid 404 errors)
+requirements = python3,kivy,pillow,pyjnius
 
 # 4. ANDROID SPECIFIC
 version = 1.0.0
 orientation = landscape
 fullscreen = 1
 
-# API Settings - Use stable API 33 instead of 34
+# API Settings
 android.api = 33
 android.minapi = 21
 android.ndk = 25b
 android.accept_sdk_license = True
 
-# ARCHITECTURES - Single arch for faster testing
-# Change to: arm64-v8a,armeabi-v7a for production release
+# ARCHITECTURES - Single arch for faster builds
 android.archs = arm64-v8a
 
 # PERMISSIONS
@@ -33,10 +31,11 @@ android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 
 # 5. BUILD SETTINGS
 android.private_storage = True
-
-# Add app metadata
 android.entrypoint = org.kivy.android.PythonActivity
 android.apptheme = @android:style/Theme.NoTitleBar
+
+# Use master branch for latest bug fixes
+p4a.branch = master
 
 [buildozer]
 log_level = 2
