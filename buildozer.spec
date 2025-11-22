@@ -10,7 +10,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ogg
 
 # 3. REQUIREMENTS - SIMPLIFIED (no version pinning to avoid 404 errors)
-requirements = python3==3.10.13,kivy==2.3.0,pillow,pyjnius==1.6.1,hostpython3==3.10.13
+requirements = python3,kivy,pillow,pyjnius
 
 # 4. ANDROID SPECIFIC
 version = 1.0.0
@@ -35,7 +35,7 @@ android.entrypoint = org.kivy.android.PythonActivity
 android.apptheme = @android:style/Theme.NoTitleBar
 
 # Use master branch for latest bug fixes
-# p4a.branch = master
+p4a.branch = stable
 
 
 [buildozer]
