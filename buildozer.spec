@@ -10,7 +10,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ogg
 
 # 3. REQUIREMENTS - SIMPLIFIED (no version pinning to avoid 404 errors)
-requirements = python3,kivy,pillow,pyjnius
+requirements = python3==3.10.13,kivy==2.3.0,pillow,pyjnius==1.6.1,hostpython3==3.10.13
 
 # 4. ANDROID SPECIFIC
 version = 1.0.0
