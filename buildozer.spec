@@ -35,7 +35,7 @@ android.entrypoint = org.kivy.android.PythonActivity
 android.apptheme = @android:style/Theme.NoTitleBar
 
 # Use master branch for latest bug fixes
-p4a.branch = stable
+p4a.branch = develop
 
 
 [buildozer]
